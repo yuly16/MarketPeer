@@ -19,6 +19,7 @@ var _logger zerolog.Logger = zerolog.New(
 	With().Str("mod", "UDPSock").Timestamp().Logger()
 
 const bufSize = 9200 // macos max udp datagram is 9216 bytes
+const recvBufSize = 100
 
 // NewUDP returns a new udp transport implementation.
 func NewUDP() transport.Transport {
@@ -38,7 +39,7 @@ func (n *UDP) CreateSocket(address string) (transport.ClosableSocket, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot create udp socket: %w", err)
 	}
-	return &Socket{PacketConn: conn,
+	return &Socket{PacketConn: conn, recvTimeoutBuf: make(chan transport.Packet, 100),
 		ins:  packets{data: make([]transport.Packet, 0, 100)},
 		outs: packets{data: make([]transport.Packet, 0, 100)},
 		traf: n.traffic}, nil
@@ -53,9 +54,10 @@ func (n *UDP) CreateSocket(address string) (transport.ClosableSocket, error) {
 // 		 not hold the states of packets. It shall be held in the caller
 type Socket struct {
 	net.PacketConn
-	ins  packets
-	outs packets
-	traf *traffic.Traffic
+	ins            packets
+	outs           packets
+	recvTimeoutBuf chan transport.Packet
+	traf           *traffic.Traffic
 }
 
 // Close implements transport.Socket. It returns an error if already closed.
@@ -68,12 +70,11 @@ func (s *Socket) Close() error {
 func (s *Socket) Send(dest string, pkt transport.Packet, timeout time.Duration) error {
 	pktBytes, err := pkt.Marshal()
 	if err != nil {
-		return fmt.Errorf("error when socket sending the packet: %w", err)
+		return fmt.Errorf("UDP send error: %w", err)
 	}
 	addr, err := net.ResolveUDPAddr("udp", dest)
 	if err != nil {
-		// TODO: refactor DRY
-		return fmt.Errorf("error when socket sending the packet: %w", err)
+		return fmt.Errorf("UDP send error: %w", err)
 	}
 	res := make(chan error)
 	go func() {
@@ -84,16 +85,16 @@ func (s *Socket) Send(dest string, pkt transport.Packet, timeout time.Duration) 
 	if timeout.Milliseconds() == 0 {
 		err := <-res
 		if err != nil {
-			return fmt.Errorf("socket send error: %w", err)
+			return fmt.Errorf("UDP send error: %w", err)
 		}
 	} else {
 		select {
 		case err := <-res:
 			if err != nil {
-				return fmt.Errorf("socket send error: %w", err)
+				return fmt.Errorf("UDP send error: %w", err)
 			}
 		case <-time.After(timeout):
-			return fmt.Errorf("socket send error: %w", transport.TimeoutErr(timeout))
+			return fmt.Errorf("UDP send error: %w", transport.TimeoutErr(timeout))
 		}
 	}
 
@@ -112,11 +113,18 @@ func (s *Socket) Recv(timeout time.Duration) (transport.Packet, error) {
 	res := make(chan int)
 	var err error
 	var pkt transport.Packet
+	// check if recvTimeoutBuffer has buffered pkt
+	select {
+	case bufPkt := <-s.recvTimeoutBuf:
+		pkt = bufPkt
+		return pkt, nil
+	default:
+	}
 	go func() {
 		buf := make([]byte, bufSize)
 		n, _, errRead := s.ReadFrom(buf)
 		// first process n bytes then process error, as indicated by the
-		// `ReadFrom` interface. TODO: if errParse=nil but errRead!=nil, shall we bypass read error?
+		// `ReadFrom` interface. FIXME: if errParse=nil but errRead!=nil, shall we bypass read error?
 		errParse := pkt.Unmarshal(buf[:n])
 		if errRead == nil {
 			err = errParse
@@ -125,20 +133,30 @@ func (s *Socket) Recv(timeout time.Duration) (transport.Packet, error) {
 		} else {
 			err = fmt.Errorf("unmarshal error(%v) plus read error: %w", errParse, errRead)
 		}
-		res <- 0
+		// TODO: it might block forever, find similar patterns
+		// do not block if timeout has already reached
+		// TODO: this might be a good pattern, we turn a blocked call to timeout version, and we need seperate callback
+		//		 for two cases(in time / time out)
+		select {
+		case res <- 0:
+		default: // timeout has reached, we need to save this output
+			if err == nil {
+				s.recvTimeoutBuf <- pkt
+			}
+		}
 	}()
 
 	if timeout.Milliseconds() == 0 {
 		<-res // no timeout, block until received
 		if err != nil {
-			return transport.Packet{}, fmt.Errorf("error socket Recv: %w", err)
+			return transport.Packet{}, fmt.Errorf("UDP Recv error: %w", err)
 		}
 
 	} else {
 		select {
 		case <-res:
 			if err != nil {
-				return transport.Packet{}, fmt.Errorf("error socket Recv: %w", err)
+				return transport.Packet{}, fmt.Errorf("UDP Recv error: %w", err)
 			}
 		case <-time.After(timeout):
 			return transport.Packet{}, transport.TimeoutErr(timeout)
