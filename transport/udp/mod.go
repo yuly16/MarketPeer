@@ -4,20 +4,18 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"os"
 	"sync"
 	"time"
 
-	"github.com/rs/zerolog"
 	"go.dedis.ch/cs438/internal/traffic"
 	"go.dedis.ch/cs438/transport"
 )
 
-var _logger zerolog.Logger = zerolog.New(
-	zerolog.NewConsoleWriter(
-		func(w *zerolog.ConsoleWriter) { w.Out = os.Stderr },
-		func(w *zerolog.ConsoleWriter) { w.TimeFormat = "15:04:05.000" })).
-	With().Str("mod", "UDPSock").Timestamp().Logger()
+// var _logger zerolog.Logger = zerolog.New(
+// 	zerolog.NewConsoleWriter(
+// 		func(w *zerolog.ConsoleWriter) { w.Out = os.Stderr },
+// 		func(w *zerolog.ConsoleWriter) { w.TimeFormat = "15:04:05.000" })).
+// 	With().Str("mod", "UDPSock").Timestamp().Logger()
 
 const bufSize = 9200 // macos max udp datagram is 9216 bytes
 const recvBufSize = 100
