@@ -25,6 +25,7 @@ var supportedOS = map[string]struct{}{
 // a bag of supported architecture
 var supportedArch = map[string]struct{}{
 	"amd64": {},
+	"arm64": {},
 }
 
 func init() {

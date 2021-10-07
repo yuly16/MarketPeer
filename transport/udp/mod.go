@@ -125,7 +125,10 @@ func (s *Socket) Recv(timeout time.Duration) (transport.Packet, error) {
 		if recvRes.err != nil {
 			return transport.Packet{}, fmt.Errorf("UDP Recv error: %w", recvRes.err)
 		} else {
-			return recvRes.pkt, nil
+			pkt := recvRes.pkt
+			s.ins.add(pkt)
+			s.traf.LogRecv(pkt.Header.RelayedBy, s.GetAddress(), pkt.Copy()) // FIXME: this copy might be avoided
+			return pkt.Copy(), nil
 		}
 	default:
 	}
