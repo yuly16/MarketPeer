@@ -2,6 +2,7 @@ package udp
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"sync"
@@ -39,7 +40,7 @@ func (n *UDP) CreateSocket(address string) (transport.ClosableSocket, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot create udp socket: %w", err)
 	}
-	return &Socket{PacketConn: conn, recvTimeoutBuf: make(chan transport.Packet, recvBufSize),
+	return &Socket{PacketConn: conn, recvBuf: make(chan readResult, recvBufSize),
 		ins:  packets{data: make([]transport.Packet, 0, 100)},
 		outs: packets{data: make([]transport.Packet, 0, 100)},
 		traf: n.traffic}, nil
@@ -54,10 +55,16 @@ func (n *UDP) CreateSocket(address string) (transport.ClosableSocket, error) {
 // 		 not hold the states of packets. It shall be held in the caller
 type Socket struct {
 	net.PacketConn
-	ins            packets
-	outs           packets
-	recvTimeoutBuf chan transport.Packet
-	traf           *traffic.Traffic
+	ins     packets
+	outs    packets
+	recvBuf chan readResult
+	traf    *traffic.Traffic
+}
+
+// wrap recv result
+type readResult struct {
+	pkt transport.Packet
+	err error
 }
 
 // Close implements transport.Socket. It returns an error if already closed.
@@ -76,13 +83,11 @@ func (s *Socket) Send(dest string, pkt transport.Packet, timeout time.Duration) 
 	if err != nil {
 		return fmt.Errorf("UDP send error: %w", err)
 	}
-	res := make(chan error)
+	// prevent the func to block forever
+	res := make(chan error, 1)
 	go func() {
 		_, err := s.WriteTo(pktBytes, addr)
-		select {
-		case res <- err:
-		default:
-		}
+		res <- err
 	}()
 	// no timeout
 	if timeout.Milliseconds() == 0 {
@@ -112,18 +117,23 @@ func (s *Socket) Send(dest string, pkt transport.Packet, timeout time.Duration) 
 // Recv implements transport.Socket. It blocks until a packet is received, or
 // the timeout is reached. In the case the timeout is reached, return a
 // TimeoutErr.
+// it is a producer as well as a consumer of recvBuf
 func (s *Socket) Recv(timeout time.Duration) (transport.Packet, error) {
-	res := make(chan int)
-	var err error
-	var pkt transport.Packet
-	// check if recvTimeoutBuffer has buffered pkt
+	// try to consume a buffered recv result
 	select {
-	case bufPkt := <-s.recvTimeoutBuf:
-		pkt = bufPkt
-		return pkt, nil
+	case recvRes := <-s.recvBuf:
+		if recvRes.err != nil {
+			return transport.Packet{}, fmt.Errorf("UDP Recv error: %w", recvRes.err)
+		} else {
+			return recvRes.pkt, nil
+		}
 	default:
 	}
+
+	// start to produce a result
 	go func() {
+		var pkt transport.Packet
+		var err error
 		buf := make([]byte, bufSize)
 		n, _, errRead := s.ReadFrom(buf)
 		// first process n bytes then process error, as indicated by the
@@ -136,41 +146,31 @@ func (s *Socket) Recv(timeout time.Duration) (transport.Packet, error) {
 		} else {
 			err = fmt.Errorf("unmarshal error(%v) plus read error: %w", errParse, errRead)
 		}
-		// do not block if timeout has already reached
-		select {
-		case res <- 0:
-		default: // timeout has reached, we need to save this output
-			if err == nil {
-				s.recvTimeoutBuf <- pkt
-			}
-		}
+		s.recvBuf <- readResult{pkt, err}
 	}()
 
+	// block call
 	if timeout.Milliseconds() == 0 {
-		<-res // no timeout, block until received
-		if err != nil {
-			return transport.Packet{}, fmt.Errorf("UDP Recv error: %w", err)
-		}
-
-	} else {
-		select {
-		case <-res:
-			if err != nil {
-				return transport.Packet{}, fmt.Errorf("UDP Recv error: %w", err)
-			}
-		case <-time.After(timeout):
-			return transport.Packet{}, transport.TimeoutErr(timeout)
-
-		}
+		timeout = math.MaxInt32 * time.Second
 	}
-
-	// success recv
-	// NOTE: here the inconsistency might be resolved. Since every `add` corresponding to
-	// 		 a success recv, and there is no ignored recv with `recvTimeoutBuf`
-	s.ins.add(pkt)
-	s.traf.LogRecv(pkt.Header.RelayedBy, s.GetAddress(), pkt.Copy()) // FIXME: this copy might be avoided
-	// shall return a copy or add a copy, since we want to keep the current state of the pkt
-	return pkt.Copy(), nil
+	// try to receive a result within timeout, mostly likely the one it produces but it could also
+	// be results produced by other `Recv` call. But it doesn't matter since #produce=#consume eventually
+	select {
+	case recvRes := <-s.recvBuf:
+		if recvRes.err != nil {
+			return transport.Packet{}, fmt.Errorf("UDP Recv error: %w", recvRes.err)
+		} else {
+			// success recv from the caller semantics
+			// NOTE: here the inconsistency might be resolved. Since every `add` corresponding to
+			// 		 a success recv, and there is no ignored recv with `recvTimeoutBuf`
+			pkt := recvRes.pkt
+			s.ins.add(pkt)
+			s.traf.LogRecv(pkt.Header.RelayedBy, s.GetAddress(), pkt.Copy()) // FIXME: this copy might be avoided
+			return recvRes.pkt.Copy(), nil
+		}
+	case <-time.After(timeout):
+		return transport.Packet{}, transport.TimeoutErr(timeout)
+	}
 }
 
 // GetAddress implements transport.Socket. It returns the address assigned. Can
