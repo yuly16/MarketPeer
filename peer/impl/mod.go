@@ -71,7 +71,7 @@ func (n *node) listenDaemon() {
 	// 1. must check if the message is truly for the node
 	// 	1.1 if yes, use `msgRegistry` to execute the callback associated with the message
 	//  1.2 if no, update the `RelayedBy` field of the message
-	timeout := 1 * time.Second
+	timeout := 100 * time.Millisecond
 	// while not killed
 	for !n.isKilled() {
 		pack, err := n.sock.Recv(timeout)
