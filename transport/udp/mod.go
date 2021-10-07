@@ -39,7 +39,7 @@ func (n *UDP) CreateSocket(address string) (transport.ClosableSocket, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot create udp socket: %w", err)
 	}
-	return &Socket{PacketConn: conn, recvTimeoutBuf: make(chan transport.Packet, 100),
+	return &Socket{PacketConn: conn, recvTimeoutBuf: make(chan transport.Packet, recvBufSize),
 		ins:  packets{data: make([]transport.Packet, 0, 100)},
 		outs: packets{data: make([]transport.Packet, 0, 100)},
 		traf: n.traffic}, nil
@@ -79,7 +79,10 @@ func (s *Socket) Send(dest string, pkt transport.Packet, timeout time.Duration) 
 	res := make(chan error)
 	go func() {
 		_, err := s.WriteTo(pktBytes, addr)
-		res <- err
+		select {
+		case res <- err:
+		default:
+		}
 	}()
 	// no timeout
 	if timeout.Milliseconds() == 0 {
@@ -99,7 +102,7 @@ func (s *Socket) Send(dest string, pkt transport.Packet, timeout time.Duration) 
 	}
 
 	// success send FIXME: there might be inconsistency, since we dont add error send
-	// to outs. But the packet might be received by others
+	// to outs. But the packet might be received by others(timeout for example)
 	// here we dont need to copy, since getOuts do the copy, we have the full control
 	s.outs.add(pkt)
 	s.traf.LogSent(pkt.Header.RelayedBy, dest, pkt)
@@ -133,10 +136,7 @@ func (s *Socket) Recv(timeout time.Duration) (transport.Packet, error) {
 		} else {
 			err = fmt.Errorf("unmarshal error(%v) plus read error: %w", errParse, errRead)
 		}
-		// TODO: it might block forever, find similar patterns
 		// do not block if timeout has already reached
-		// TODO: this might be a good pattern, we turn a blocked call to timeout version, and we need seperate callback
-		//		 for two cases(in time / time out)
 		select {
 		case res <- 0:
 		default: // timeout has reached, we need to save this output
@@ -165,8 +165,8 @@ func (s *Socket) Recv(timeout time.Duration) (transport.Packet, error) {
 	}
 
 	// success recv
-	// FIXME: there might be inconsistency, since we dont add error send
-	// to ins. But the packet might be received by others
+	// NOTE: here the inconsistency might be resolved. Since every `add` corresponding to
+	// 		 a success recv, and there is no ignored recv with `recvTimeoutBuf`
 	s.ins.add(pkt)
 	s.traf.LogRecv(pkt.Header.RelayedBy, s.GetAddress(), pkt.Copy()) // FIXME: this copy might be avoided
 	// shall return a copy or add a copy, since we want to keep the current state of the pkt
