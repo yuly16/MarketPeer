@@ -24,6 +24,7 @@ type Transport interface {
 type Socket interface {
 	// Send sends a msg to the destination. If the timeout is reached without
 	// message received, returns a TimeoutErr. A value of 0 means no timeout.
+	// must support self-send
 	Send(dest string, pkt Packet, timeout time.Duration) error
 
 	// Recv blocks until a packet is received, or the timeout is reached. In the
@@ -90,6 +91,10 @@ type Packet struct {
 	Header *Header
 
 	Msg *Message
+}
+
+func (p *Packet) String() string {
+	return fmt.Sprintf("{Header=%s, Msg=%s}", p.Header, p.Msg)
 }
 
 // Marshal transforms a packet to something that can be sent over the network.
@@ -176,6 +181,10 @@ func (h Header) HTML() string {
 type Message struct {
 	Type    string
 	Payload json.RawMessage
+}
+
+func (m *Message) String() string {
+	return fmt.Sprintf("{Type=%s, PayLoad=%s}", m.Type, string(m.Payload))
 }
 
 // Copy returns a copy of the message

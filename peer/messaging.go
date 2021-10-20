@@ -60,6 +60,16 @@ type RoutingTable map[string]string
 func (r RoutingTable) String() string {
 	out := new(strings.Builder)
 
+	for origin, relay := range r {
+		fmt.Fprintf(out, "%s->%s, ", origin, relay)
+	}
+
+	return out.String()
+}
+
+func (r RoutingTable) PrettyString() string {
+	out := new(strings.Builder)
+
 	out.WriteString("Origin\tRelay\n")
 	out.WriteString("---\t---\n")
 

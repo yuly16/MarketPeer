@@ -41,6 +41,7 @@ func (t *Transport) CreateSocket(address string) (transport.ClosableSocket, erro
 		port := atomic.AddUint32(&counter, 1)
 		address = fmt.Sprintf("%s:%d", address, port)
 	}
+	// assign each address a channel to send/recv messages(buffered channel)
 	t.incomings[address] = make(chan transport.Packet, 100)
 	t.Unlock()
 
@@ -87,6 +88,7 @@ func (s *Socket) Close() error {
 
 // Send implements transport.Socket.
 func (s *Socket) Send(dest string, pkt transport.Packet, timeout time.Duration) error {
+	// check if dest socket exists
 	s.RLock()
 	to, ok := s.incomings[dest]
 
@@ -107,6 +109,7 @@ func (s *Socket) Send(dest string, pkt transport.Packet, timeout time.Duration) 
 	}
 
 	s.outs.add(pkt)
+	// Note: the channel is buffered, so sent does not mean received
 	s.traffic.LogSent(pkt.Header.RelayedBy, dest, pkt)
 
 	return nil
@@ -115,6 +118,7 @@ func (s *Socket) Send(dest string, pkt transport.Packet, timeout time.Duration) 
 // Recv implements transport.Socket.
 func (s *Socket) Recv(timeout time.Duration) (transport.Packet, error) {
 	s.RLock()
+	// my addr is guaranteed to exist, no need to check
 	myChan := s.incomings[s.myAddr]
 	s.RUnlock()
 
@@ -123,6 +127,7 @@ func (s *Socket) Recv(timeout time.Duration) (transport.Packet, error) {
 		return transport.Packet{}, transport.TimeoutErr(timeout)
 	case pkt := <-myChan:
 		s.traffic.LogRecv(pkt.Header.RelayedBy, s.myAddr, pkt)
+		// TODO: this is unsafe
 		s.ins.add(pkt)
 		return pkt, nil
 	}
