@@ -11,10 +11,10 @@ div.search input {
     margin: 5px 0;
 }
 
-div.search div.search-index-result {
+div.search div.search-all-result {
     font-family: 'Courier New', Courier, monospace;
 }
 
-div.search div.search-search-result {
+div.search div.search-first-result {
     font-family: 'Courier New', Courier, monospace;
 }

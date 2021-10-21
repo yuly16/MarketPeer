@@ -14,6 +14,9 @@ import (
 	"go.dedis.ch/cs438/registry"
 	"go.dedis.ch/cs438/registry/standard"
 
+	"go.dedis.ch/cs438/storage"
+	"go.dedis.ch/cs438/storage/inmemory"
+
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 )
@@ -128,6 +131,12 @@ type configTemplate struct {
 
 	AckTimeout        time.Duration
 	ContinueMongering float64
+
+	chunkSize uint
+
+	storage storage.Storage
+
+	dataRequestBackoff peer.Backoff
 }
 
 func newConfigTemplate() configTemplate {
@@ -145,6 +154,16 @@ func newConfigTemplate() configTemplate {
 
 		AckTimeout:        time.Second * 3,
 		ContinueMongering: 0.5,
+
+		chunkSize: 8192,
+
+		storage: inmemory.NewPersistency(),
+
+		dataRequestBackoff: peer.Backoff{
+			Initial: time.Second * 2,
+			Factor:  2,
+			Retry:   5,
+		},
 	}
 }
 
@@ -201,6 +220,24 @@ func WithAckTimeout(d time.Duration) Option {
 	}
 }
 
+// WithChunkSize sets a specific chunk size.
+func WithChunkSize(chunkSize uint) Option {
+	return func(ct *configTemplate) {
+		ct.chunkSize = chunkSize
+	}
+}
+
+// WithDataRequestBackoff sets a specific data request backoff.
+func WithDataRequestBackoff(initial time.Duration, factor uint, retry uint) Option {
+	return func(ct *configTemplate) {
+		ct.dataRequestBackoff = peer.Backoff{
+			Initial: initial,
+			Factor:  factor,
+			Retry:   retry,
+		}
+	}
+}
+
 // NewTestNode returns a new test node.
 func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	addr string, opts ...Option) TestNode {
@@ -221,6 +258,9 @@ func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	config.HeartbeatInterval = template.HeartbeatInterval
 	config.ContinueMongering = template.ContinueMongering
 	config.AckTimeout = template.AckTimeout
+	config.Storage = template.storage
+	config.ChunkSize = template.chunkSize
+	config.BackoffDataRequest = template.dataRequestBackoff
 
 	node := f(config)
 
@@ -308,6 +348,11 @@ func (t TestNode) GetChatMsgs() []*types.ChatMessage {
 	}
 
 	return chatMsgs
+}
+
+// GetStorage returns the storage provided to the node.
+func (t TestNode) GetStorage() storage.Storage {
+	return t.config.Storage
 }
 
 // Status allows to check if something has been called or not.
@@ -407,6 +452,54 @@ func GetEmpty(t *testing.T, msg *transport.Message) types.EmptyMessage {
 	require.NoError(t, err)
 
 	return emptyMessage
+}
+
+// GetDataRequest returns the DataRequest associated to the transport.Message.
+func GetDataRequest(t *testing.T, msg *transport.Message) types.DataRequestMessage {
+	require.Equal(t, "datarequest", msg.Type)
+
+	var dataRequestMessage types.DataRequestMessage
+
+	err := json.Unmarshal(msg.Payload, &dataRequestMessage)
+	require.NoError(t, err)
+
+	return dataRequestMessage
+}
+
+// GetDataReply returns the DataReply associated to the transport.Message.
+func GetDataReply(t *testing.T, msg *transport.Message) types.DataReplyMessage {
+	require.Equal(t, "datareply", msg.Type)
+
+	var dataReplyMessage types.DataReplyMessage
+
+	err := json.Unmarshal(msg.Payload, &dataReplyMessage)
+	require.NoError(t, err)
+
+	return dataReplyMessage
+}
+
+// GetSearchRequest returns the SearchRequest associated to the transport.Message.
+func GetSearchRequest(t *testing.T, msg *transport.Message) types.SearchRequestMessage {
+	require.Equal(t, "searchrequest", msg.Type)
+
+	var searchRequestMessage types.SearchRequestMessage
+
+	err := json.Unmarshal(msg.Payload, &searchRequestMessage)
+	require.NoError(t, err)
+
+	return searchRequestMessage
+}
+
+// GetSearchReply returns the SearchReply associated to the transport.Message.
+func GetSearchReply(t *testing.T, msg *transport.Message) types.SearchReplyMessage {
+	require.Equal(t, "searchreply", msg.Type)
+
+	var searchReplyMessage types.SearchReplyMessage
+
+	err := json.Unmarshal(msg.Payload, &searchReplyMessage)
+	require.NoError(t, err)
+
+	return searchReplyMessage
 }
 
 // GetRandBytes returns random bytes.
