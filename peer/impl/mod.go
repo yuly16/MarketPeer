@@ -259,24 +259,24 @@ func (n *node) send(pkt transport.Packet) (string, error) {
 	return nextDest, nil
 }
 
-func (n *node) sendTimeout(pkt transport.Packet, timeout time.Duration) (string, error) {
-	done := make(chan int, 1)
-	var nextDest string
-	var err error
-	go func() {
-		nextDest, err = n.send(pkt)
-		done <- 0
-	}()
-	select {
-	case <-done:
-		if err != nil {
-			return nextDest, fmt.Errorf("send error: %w", err)
-		}
-		return nextDest, nil
-	case <-time.After(timeout):
-		return "", transport.TimeoutErr(timeout)
-	}
-}
+// func (n *node) sendTimeout(pkt transport.Packet, timeout time.Duration) (string, error) {
+// 	done := make(chan int, 1)
+// 	var nextDest string
+// 	var err error
+// 	go func() {
+// 		nextDest, err = n.send(pkt)
+// 		done <- 0
+// 	}()
+// 	select {
+// 	case <-done:
+// 		if err != nil {
+// 			return nextDest, fmt.Errorf("send error: %w", err)
+// 		}
+// 		return nextDest, nil
+// 	case <-time.After(timeout):
+// 		return "", transport.TimeoutErr(timeout)
+// 	}
+// }
 
 // Unicast implements peer.Messaging
 // send to itself is naturally supported by UDP
