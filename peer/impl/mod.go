@@ -163,7 +163,7 @@ func (n *node) listenDaemon() {
 		// FIXME: AddPeer only add neighbor nodes or not?
 		// what do we know?
 		// 	- relayedBy is near us relayedBy:relayedBy (if relayedBy is empty, then source is near us)
-		n.AddPeer(pack.Header.RelayedBy) // we can only ensure that relay is near us
+		n.addNeighbor(pack.Header.RelayedBy) // we can only ensure that relay is near us
 
 		// 1. must check if the message is truly for the node
 		// 	1.1 if yes, use `msgRegistry` to execute the callback associated with the message
@@ -219,8 +219,13 @@ func (n *node) Stop() error {
 }
 
 func (n *node) nextHop(dest string) (string, error) {
+	if n.isNeighbor(dest) {
+		return dest, nil
+	}
+
 	n.mu.Lock()
 	defer n.mu.Unlock()
+
 	// dest must be known
 	nextDest, ok := n.route[dest]
 	var err error
@@ -401,6 +406,22 @@ func (n *node) AddPeer(addr ...string) {
 	n.Debug().Str("route", n.route.String()).Str("neighbors", fmt.Sprintf("%v", n.neighbors)).Msg("after added")
 }
 
+func (n *node) addNeighbor(addr ...string) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	// we could directly reach the peers
+	// NOTE: adding ourselves should have no effects
+	n.Info().Strs("peers", addr).Msg("adding peers")
+	for i := 0; i < len(addr); i++ {
+		if _, ok := n.neighborSet[addr[i]]; !ok {
+			n.neighborSet[addr[i]] = struct{}{}
+			n.neighbors = append(n.neighbors, addr[i])
+		}
+
+	}
+	n.Debug().Str("neighbors", fmt.Sprintf("%v", n.neighbors)).Msg("after neighbor added")
+}
+
 // GetRoutingTable implements peer.Service
 func (n *node) GetRoutingTable() peer.RoutingTable {
 	n.mu.Lock()
@@ -492,10 +513,10 @@ func (n *node) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error 
 		isNew = true // there is some new msgs we need to process, so it is new
 
 		// update the routing table
-		if !n.isNeighbor(rumor.Origin) {
-			__logger.Info().Msg("%s is not neighbor, we could update routing table")
-			n.SetRoutingEntry(rumor.Origin, pkt.Header.RelayedBy)
-		}
+		// if !n.isNeighbor(rumor.Origin) {
+		// 	__logger.Info().Msg("%s is not neighbor, we could update routing table")
+		// }
+		n.SetRoutingEntry(rumor.Origin, pkt.Header.RelayedBy)
 
 		// now process the embed msg, call the callback
 		// wrap a packet
