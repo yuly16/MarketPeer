@@ -3,6 +3,7 @@ package impl
 import (
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"sync"
@@ -48,6 +49,10 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	node.ackFutures = make(map[string]chan int)
 	node.neighbors = make([]string, 0)
 	node.neighborSet = make(map[string]struct{})
+
+	if node.conf.AckTimeout == 0 {
+		node.conf.AckTimeout = math.MaxInt64
+	}
 
 	node.Logger = _logger.With().Str("Peer", fmt.Sprintf("%d %s", node.id, node.sock.GetAddress())).Logger()
 	_logger.Info().Int32("id", node.id).Str("addr", node.sock.GetAddress()).Msg("create new peer")
@@ -340,49 +345,57 @@ func (n *node) Broadcast(msg transport.Message) error {
 		n.Err(err).Send()
 		return fmt.Errorf("Broadcast error: %w", err)
 	}
-	preNei := ""
-	acked := false
-	for !acked {
-		// TODO: what should be ttl?
-		// ensure the randNeigh is not previous one
-		// if has only one neighbor, then randNeighExcept will return this only neighbor
-		randNei := n.randNeighExcept(preNei)
-		header := transport.NewHeader(n.addr(), n.addr(), randNei, 0)
-		pkt := transport.Packet{Header: &header, Msg: &ruMsg}
-		preNei = randNei
-		// create and register the future before send, such that AckCallback will always happens after future register
-		// create ack future, it is a buffered channel, such that ack after timeout do not block on sending on future
-		// TODO: 总结一下, 差点又犯了 happens before 的假设错误
-		future := make(chan int, 1)
-		n.acuMu.Lock()
-		n.ackFutures[pkt.Header.PacketID] = future
-		n.Debug().Msgf("broadcast register a future for packet %s", pkt.Header.PacketID)
-		n.acuMu.Unlock()
 
-		n.Debug().Msgf("broadcast prepares to send pkt to %s", randNei)
-		nextDest, err := n.send(pkt)
-		if err != nil {
-			n.Err(err).Send()
-			// TODO: this early return did not delete entries
-			return fmt.Errorf("Broadcast error: %w", err)
-		}
-		n.Debug().Str("dest", header.Destination).Str("nextDest", nextDest).Str("msg", ruMsg.String()).Str("pkt", pkt.String()).Msg("possibly sended")
+	// send and wait for the ack
+	go func() {
+		preNei := ""
+		tried := 0
+		acked := false
+		for tried < 2 && !acked {
+			tried++
+			// TODO: what should be ttl?
+			// ensure the randNeigh is not previous one
+			// if has only one neighbor, then randNeighExcept will return this only neighbor
+			randNei := n.randNeighExcept(preNei)
+			header := transport.NewHeader(n.addr(), n.addr(), randNei, 0)
+			pkt := transport.Packet{Header: &header, Msg: &ruMsg}
+			preNei = randNei
+			// create and register the future before send, such that AckCallback will always happens after future register
+			// create ack future, it is a buffered channel, such that ack after timeout do not block on sending on future
+			// TODO: 总结一下, 差点又犯了 happens before 的假设错误
+			future := make(chan int, 1)
+			n.acuMu.Lock()
+			n.ackFutures[pkt.Header.PacketID] = future
+			n.Debug().Msgf("broadcast register a future for packet %s", pkt.Header.PacketID)
+			n.acuMu.Unlock()
 
-		// start to wait for the ack message
-		n.Debug().Msgf("start to wait for broadcast ack message on packet %s", pkt.Header.PacketID)
-		select {
-		case <-future:
-			n.Debug().Msgf("ack received and properly processed")
-			acked = true
-		case <-time.After(n.conf.AckTimeout):
-			n.Debug().Msgf("ack timeout, start another probe")
-			// send to another random neighbor
+			n.Debug().Msgf("broadcast prepares to send pkt to %s", randNei)
+			nextDest, err := n.send(pkt)
+			if err != nil {
+				n.Err(fmt.Errorf("Broadcast error: %w", err)).Send()
+				// TODO: this early return did not delete entries
+				return
+			}
+			n.Debug().Str("dest", header.Destination).Str("nextDest", nextDest).Str("msg", ruMsg.String()).Str("pkt", pkt.String()).Msg("possibly sended")
+
+			// start to wait for the ack message
+			n.Debug().Msgf("start to wait for broadcast ack message on packet %s", pkt.Header.PacketID)
+			select {
+			case <-future:
+				acked = true
+				n.Debug().Msgf("ack received and properly processed")
+			case <-time.After(n.conf.AckTimeout):
+				n.Debug().Msgf("ack timeout, start another probe")
+				// send to another random neighbor
+			}
+			// delete unused future
+			n.acuMu.Lock()
+			delete(n.ackFutures, pkt.Header.PacketID)
+			n.acuMu.Unlock()
 		}
-		// delete unused future
-		n.acuMu.Lock()
-		delete(n.ackFutures, pkt.Header.PacketID)
-		n.acuMu.Unlock()
-	}
+
+	}()
+
 	return nil
 }
 
