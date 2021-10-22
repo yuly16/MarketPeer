@@ -44,11 +44,10 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	// init the routing table, add this.addr
 	node.route = peer.RoutingTable{node.addr(): node.addr()}
 	node.seqs = make(map[string]uint)
-	node.seqs[node.addr()] = 0 // this.seq init to 0
 	node.rumors = make(map[string][]types.Rumor)
-	node.rumors[node.addr()] = make([]types.Rumor, 0, 10)
 	node.ackFutures = make(map[string]chan int)
 	node.neighbors = make([]string, 0)
+	node.neighborSet = make(map[string]struct{})
 
 	node.Logger = _logger.With().Str("Peer", fmt.Sprintf("%d %s", node.id, node.sock.GetAddress())).Logger()
 	_logger.Info().Int32("id", node.id).Str("addr", node.sock.GetAddress()).Msg("create new peer")
@@ -74,9 +73,10 @@ type node struct {
 	acuMu      sync.Mutex
 	ackFutures map[string]chan int
 
-	mu        sync.Mutex // protect access to `route` and `neighbors`, for example, listenDaemon and Unicast, redirect will access it
-	neighbors []string   // it will only grow, since no node will leave the network in assumption
-	route     peer.RoutingTable
+	mu          sync.Mutex // protect access to `route` and `neighbors`, for example, listenDaemon and Unicast, redirect will access it
+	neighbors   []string   // it will only grow, since no node will leave the network in assumption
+	neighborSet map[string]struct{}
+	route       peer.RoutingTable
 
 	stat int32
 
@@ -282,7 +282,7 @@ func (n *node) Unicast(dest string, msg transport.Message) error {
 		err = fmt.Errorf("Unicast error: %w", err)
 		n.Err(err).Send()
 	}
-	n.Debug().Str("dest", dest).Str("nextDest", nextDest).Str("msg", msg.String()).Str("pkt", pkt.String()).Msg("send packet success")
+	n.Debug().Str("dest", dest).Str("nextDest", nextDest).Str("msg", msg.String()).Str("pkt", pkt.String()).Msg("unicast packet sended")
 	return err
 }
 
@@ -291,6 +291,7 @@ func (n *node) Unicast(dest string, msg transport.Message) error {
 // but still process it
 func (n *node) Broadcast(msg transport.Message) error {
 	// TODO: can I first process the message?
+	n.Debug().Msg("start to broadcast")
 	// 0. process the embeded message
 	_header := transport.NewHeader(n.addr(), n.addr(), n.addr(), 0)
 	err := n.msgRegistry.ProcessPacket(transport.Packet{
@@ -301,6 +302,7 @@ func (n *node) Broadcast(msg transport.Message) error {
 		n.Err(err).Send()
 		return fmt.Errorf("Broadcast error: %w", err)
 	}
+	n.Debug().Msg("process Broad Msg done")
 
 	// 1. wrap a RumorMessage, and send it through the socket to one random neighbor
 	// once the seq is added and Rumor is constructed, this Rumor is gurantted to
@@ -309,11 +311,17 @@ func (n *node) Broadcast(msg transport.Message) error {
 
 	n.seqMu.Lock()
 	// fetch my last seq and increase it
+	if _, ok := n.seqs[n.addr()]; !ok {
+		n.seqs[n.addr()] = 0
+		n.rumors[n.addr()] = []types.Rumor{}
+	}
 	seq := n.seqs[n.addr()] + 1
 	n.seqs[n.addr()] = seq
+
 	// update rumors
 	ru := types.Rumor{Origin: n.addr(), Msg: &msg, Sequence: uint(seq)}
 	n.rumors[n.addr()] = append(n.rumors[n.addr()], ru)
+	n.Debug().Str("seqs", fmt.Sprintf("%v", n.seqs)).Str("rumors", fmt.Sprintf("%v", n.rumors)).Msg("update seqs and rumors first")
 	n.seqMu.Unlock()
 
 	if !n.hasNeighbor() {
@@ -337,28 +345,32 @@ func (n *node) Broadcast(msg transport.Message) error {
 		header := transport.NewHeader(n.addr(), n.addr(), randNei, 0)
 		pkt := transport.Packet{Header: &header, Msg: &ruMsg}
 		preNei = randNei
-
 		// create and register the future before send, such that AckCallback will always happens after future register
 		// create ack future, it is a buffered channel, such that ack after timeout do not block on sending on future
 		// TODO: 总结一下, 差点又犯了 happens before 的假设错误
 		future := make(chan int, 1)
 		n.acuMu.Lock()
 		n.ackFutures[pkt.Header.PacketID] = future
+		n.Debug().Msgf("broadcast register a future for packet %s", pkt.Header.PacketID)
 		n.acuMu.Unlock()
 
+		n.Debug().Msgf("broadcast prepares to send pkt to %s", randNei)
 		nextDest, err := n.send(pkt)
 		if err != nil {
 			n.Err(err).Send()
 			// TODO: this early return did not delete entries
 			return fmt.Errorf("Broadcast error: %w", err)
 		}
-		n.Debug().Str("dest", header.Destination).Str("nextDest", nextDest).Str("msg", ruMsg.String()).Str("pkt", pkt.String()).Msg("broadcast success")
+		n.Debug().Str("dest", header.Destination).Str("nextDest", nextDest).Str("msg", ruMsg.String()).Str("pkt", pkt.String()).Msg("possibly sended")
 
 		// start to wait for the ack message
+		n.Debug().Msgf("start to wait for broadcast ack message on packet %s", pkt.Header.PacketID)
 		select {
 		case <-future:
+			n.Debug().Msgf("ack received and properly processed")
 			acked = true
 		case <-time.After(n.conf.AckTimeout):
+			n.Debug().Msgf("ack timeout, start another probe")
 			// send to another random neighbor
 		}
 		// delete unused future
@@ -369,6 +381,8 @@ func (n *node) Broadcast(msg transport.Message) error {
 	return nil
 }
 
+// TODO: neighbor add should deduplicate
+// TODO: status should only contains valid(cannot [])
 // AddPeer implements peer.Service
 func (n *node) AddPeer(addr ...string) {
 	n.mu.Lock()
@@ -378,7 +392,11 @@ func (n *node) AddPeer(addr ...string) {
 	n.Info().Strs("peers", addr).Msg("adding peers")
 	for i := 0; i < len(addr); i++ {
 		n.route[addr[i]] = addr[i]
-		n.neighbors = append(n.neighbors, addr[i])
+		if _, ok := n.neighborSet[addr[i]]; !ok {
+			n.neighborSet[addr[i]] = struct{}{}
+			n.neighbors = append(n.neighbors, addr[i])
+		}
+
 	}
 	n.Debug().Str("route", n.route.String()).Str("neighbors", fmt.Sprintf("%v", n.neighbors)).Msg("after added")
 }
@@ -428,29 +446,10 @@ func (n *node) addr() string {
 // Q: seqs update shall onReceived or onProcessed?
 // A: currently onReceived. Because received req is guaranteed to be processed eventually.
 func (n *node) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error {
-	// 1. send back a AckMessage to source
-	// here we need to lock since the MarshalMessage call will read n.seqs
-	n.seqMu.Lock()
-	statusMsg := types.StatusMessage(n.seqs)
-	ack, err := n.msgRegistry.MarshalMessage(&types.AckMessage{AckedPacketID: pkt.Header.PacketID, Status: statusMsg})
-	n.seqMu.Unlock()
+	__logger := n.Logger.With().Str("func", "RumorsMsgCallback").Logger()
+	__logger.Info().Msg("enter rumors callback")
 
-	if err != nil {
-		n.Err(err).Send()
-		return fmt.Errorf("RumorsMsgCallback fail: %w", err)
-	}
-	n.Info().Str("dest", pkt.Header.RelayedBy).Msg("send ack back")
-	// Q: shall it be creator or relayBy?
-	// A: it should be relayedBy; In broadcast init case, both relayedBy and source is ok.
-	//    in broadcast propagation case, the sender will not check ack. We use relayedBy
-	//    since it is in the routing table while source might not. In other words, Ack is point2point.
-	err = n.Unicast(pkt.Header.RelayedBy, ack)
-	if err != nil {
-		n.Err(err).Send()
-		return fmt.Errorf("RumorsMsgCallback fail: %w", err)
-	}
-
-	// 2. processing each rumor
+	// 1. processing each rumor
 	rumorsMsg := msg.(*types.RumorsMessage)
 	isNew := false
 	for _, rumor := range rumorsMsg.Rumors {
@@ -463,6 +462,11 @@ func (n *node) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error 
 				expected = true
 				n.seqs[rumor.Origin] = rumor.Sequence // update lastSeq of this origin
 				n.rumors[rumor.Origin] = append(n.rumors[rumor.Origin], rumor)
+				__logger.Info().Str("Origin", rumor.Origin).Uint("Seq", rumor.Sequence).
+					Msgf("expected seq")
+			} else {
+				__logger.Info().Str("Origin", rumor.Origin).Uint("Seq", rumor.Sequence).
+					Msgf("UNexpected seq!!")
 			}
 		} else {
 			// this is the first time we see this origin, so we need to restrict it to 1
@@ -470,6 +474,11 @@ func (n *node) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error 
 				expected = true
 				n.seqs[rumor.Origin] = 1                      // update lastSeq of this origin
 				n.rumors[rumor.Origin] = []types.Rumor{rumor} // init + append
+				__logger.Info().Str("Origin", rumor.Origin).Uint("Seq", rumor.Sequence).
+					Msgf("expected seq")
+			} else {
+				__logger.Info().Str("Origin", rumor.Origin).Uint("Seq", rumor.Sequence).
+					Msgf("UNexpected seq!!")
 			}
 		}
 		n.seqMu.Unlock()
@@ -484,6 +493,7 @@ func (n *node) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error 
 
 		// update the routing table
 		if !n.isNeighbor(rumor.Origin) {
+			__logger.Info().Msg("%s is not neighbor, we could update routing table")
 			n.SetRoutingEntry(rumor.Origin, pkt.Header.RelayedBy)
 		}
 
@@ -493,15 +503,42 @@ func (n *node) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error 
 			Header: pkt.Header,
 			Msg:    rumor.Msg,
 		}
+		__logger.Info().Msg("now processing embed message")
 		if err := n.msgRegistry.ProcessPacket(pkt); err != nil {
-			n.Err(err).Send()
+			__logger.Err(err).Send()
 			return fmt.Errorf("RumorsMsgCallback fail: processing rumor's embed msg fail: %w", err)
 		}
+	}
+
+	// Q: why after processing rumors?
+	// A: because rumors might contain the updates sender wants to give us. If we directly ack
+	//    then sender will still find we have not the update, then it will send it again.
+	// 2. send back a AckMessage to source
+	// here we need to lock since the MarshalMessage call will read n.seqs
+	n.seqMu.Lock()
+	statusMsg := types.StatusMessage(n.seqs)
+	ack, err := n.msgRegistry.MarshalMessage(&types.AckMessage{AckedPacketID: pkt.Header.PacketID, Status: statusMsg})
+	n.seqMu.Unlock()
+
+	if err != nil {
+		__logger.Err(err).Send()
+		return fmt.Errorf("RumorsMsgCallback fail: %w", err)
+	}
+	__logger.Info().Str("dest", pkt.Header.RelayedBy).Msg("send ack back")
+	// Q: shall it be creator or relayBy?
+	// A: it should be relayedBy; In broadcast init case, both relayedBy and source is ok.
+	//    in broadcast propagation case, the sender will not check ack. We use relayedBy
+	//    since it is in the routing table while source might not. In other words, Ack is point2point.
+	err = n.Unicast(pkt.Header.RelayedBy, ack)
+	if err != nil {
+		__logger.Err(err).Send()
+		return fmt.Errorf("RumorsMsgCallback fail: %w", err)
 	}
 
 	// 3. possibly redirect the RumorsMessage to another node incase it is "new"
 	// for those msgs that are ignored, are they not new. see https://moodle.epfl.ch/mod/forum/discuss.php?d=65056
 	if !isNew {
+		__logger.Info().Msg("nothing new from rumors, dont need to propagate, return")
 		return nil
 	}
 
@@ -510,12 +547,13 @@ func (n *node) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error 
 	// dont need to check neighbor, otherwise we cannot receive this message.
 	randNei := n.randNeighExcept(pkt.Header.RelayedBy)
 	if randNei == pkt.Header.RelayedBy {
-		n.Warn().Str("callback", "RumorsMsgCallback").Msg("has only one neighbor, skip Rumor propagation")
+		__logger.Warn().Str("callback", "RumorsMsgCallback").Msg("has only one neighbor, skip Rumor propagation")
 		return nil
 	}
+	__logger.Info().Msgf("something new, prepares to unicast the rumores to %s", randNei)
 	err = n.Unicast(randNei, *pkt.Msg)
 	if err != nil {
-		n.Err(err).Send()
+		__logger.Err(err).Send()
 		return fmt.Errorf("RumorsMsgCallback fail: propagate to random neighbor fail: %w", err)
 	}
 	return nil
@@ -524,6 +562,7 @@ func (n *node) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error 
 // assumption: only ListenDaemon invoke StatusMsgCallback. That is, it will not be called with Unicast/BroadCast, thus will never be embeded
 // so it is generally race-free
 func (n *node) StatusMsgCallback(msg types.Message, pkt transport.Packet) error {
+	n.Debug().Msgf("enter status callback")
 	other := pkt.Header.Source
 	statusMsg := msg.(*types.StatusMessage)
 	otherView := map[string]uint(*statusMsg)
@@ -542,6 +581,7 @@ func (n *node) StatusMsgCallback(msg types.Message, pkt transport.Packet) error 
 			// other view also contains peer, then compare the seq
 			if lastSeq < otherLastSeq {
 				// other have something we dont have
+				n.Debug().Msgf("I dont have rumors(seq %d-%d) from peer %s", lastSeq+1, otherLastSeq+1, p)
 				otherExceptMe = true
 
 			} else if lastSeq > otherLastSeq {
@@ -563,6 +603,7 @@ func (n *node) StatusMsgCallback(msg types.Message, pkt transport.Packet) error 
 	for p := range otherView {
 		if _, ok := myView[p]; !ok {
 			// other have something we dont have
+			n.Debug().Msgf("I dont have rumors(seq 1-%d) from peer %s", otherView[p], p)
 			otherExceptMe = true
 		}
 		// when ok=true, it is common key(p), this case has already been handled, just skip
@@ -577,6 +618,7 @@ func (n *node) StatusMsgCallback(msg types.Message, pkt transport.Packet) error 
 			n.Err(marshalErr).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send status message back: %w", marshalErr)
 		}
+		n.Info().Msgf("otherExceptMe valid, unicast statusMsg %s to %s", possibleStatus, other)
 		if err := n.Unicast(other, possibleStatusMsg); err != nil {
 			n.Err(err).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send status message back: %w", err)
@@ -589,11 +631,13 @@ func (n *node) StatusMsgCallback(msg types.Message, pkt transport.Packet) error 
 		for _, rus := range meExceptOther {
 			otherMissingRumors = append(otherMissingRumors, rus...)
 		}
-		rumorsMsg, err := n.msgRegistry.MarshalMessage(&types.RumorsMessage{Rumors: otherMissingRumors})
+		_rumorsMsg := types.RumorsMessage{Rumors: otherMissingRumors}
+		rumorsMsg, err := n.msgRegistry.MarshalMessage(&_rumorsMsg)
 		if err != nil {
 			n.Err(err).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send Rumors message: %w", err)
 		}
+		n.Info().Msgf("meExceptOther valid, unicast rumorsMsg %s to %s", _rumorsMsg, other)
 		if err := n.Unicast(other, rumorsMsg); err != nil {
 			n.Err(err).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send Rumors message: %w", err)
@@ -615,6 +659,7 @@ func (n *node) StatusMsgCallback(msg types.Message, pkt transport.Packet) error 
 			n.Err(marshalErr).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send status message rand: %w", marshalErr)
 		}
+		n.Info().Msgf("same view, unicast statusMsg %s to random nei %s", statusMsg, other)
 		if err := n.Unicast(nei, possibleStatusMsg); err != nil {
 			n.Err(err).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send status message rand: %w", err)
@@ -633,16 +678,17 @@ func (n *node) StatusMsgCallback(msg types.Message, pkt transport.Packet) error 
 //         con: if a message is lost in the network, then no ack will be received, and we got a ghost entry
 // assumption: only ListenDaemon invoke AckMsgCallback. That is, it will not be called with Unicast/BroadCast, thus will never be embeded
 func (n *node) AckMsgCallback(msg types.Message, pkt transport.Packet) error {
+	n.Debug().Msg("start ack callback")
 	ack := msg.(*types.AckMessage)
 	n.acuMu.Lock()
-	future, ok := n.ackFutures[pkt.Header.PacketID]
+	future, ok := n.ackFutures[ack.AckedPacketID]
 	n.acuMu.Unlock()
 
 	if ok {
 		future <- 0
 	} else {
 		// do nothing, it is a arrive-late ack msg
-		n.Debug().Msgf("packet %s ack arrives late", pkt.Header.PacketID)
+		n.Info().Msgf("packet %s has no future to complete", pkt.Header.PacketID)
 	}
 
 	// TODO: if already timeouted, shall we process the StatusMessage?
@@ -662,6 +708,7 @@ func (n *node) AckMsgCallback(msg types.Message, pkt transport.Packet) error {
 		n.Err(err).Send()
 		return fmt.Errorf("AckMsgCallback fail: %w", err)
 	}
+	n.Debug().Msg("ack process embeded msg done")
 
 	return nil
 }
@@ -702,7 +749,7 @@ func (n *node) randNeighExcept(except string) string {
 		return NONEIGHBOR
 	}
 	if len(n.neighbors) == 1 {
-		return except
+		return n.neighbors[0]
 	}
 	randN := n.neighbors[rand.Int31n(int32(len(n.neighbors)))]
 	for randN == except {
