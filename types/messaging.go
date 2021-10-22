@@ -17,7 +17,7 @@ func (c ChatMessage) NewEmpty() Message {
 }
 
 func ChatMsgCallback(msg Message, pkt transport.Packet) error {
-	log.Info().Str("chat msg", msg.String())
+	log.Info().Str("chat msg", msg.String()).Send()
 	return nil
 }
 
@@ -150,6 +150,10 @@ func (s StatusMessage) HTML() string {
 
 // -----------------------------------------------------------------------------
 // EmptyMessage
+
+func EmptyMsgCallback(msg Message, pkt transport.Packet) error {
+	return nil
+}
 
 // NewEmpty implements types.Message.
 func (EmptyMessage) NewEmpty() Message {
