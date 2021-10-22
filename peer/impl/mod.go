@@ -652,7 +652,7 @@ func (n *node) StatusMsgCallback(msg types.Message, pkt transport.Packet) error 
 			n.Err(marshalErr).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send status message back: %w", marshalErr)
 		}
-		n.Info().Msgf("otherExceptMe valid, unicast statusMsg %s to %s", possibleStatus, other)
+		n.Info().Msgf("otherExceptMe valid, unicast statusMsg %s to %s", possibleStatusMsg, other)
 		if err := n.Unicast(other, possibleStatusMsg); err != nil {
 			n.Err(err).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send status message back: %w", err)
