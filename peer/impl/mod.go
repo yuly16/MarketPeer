@@ -163,11 +163,6 @@ func (n *node) listenDaemon() {
 		// start processing the pack
 		n.Info().Str("pkt", pack.String()).Msg("receive packet")
 		// 0. update the routing table
-		//	0.1 now we might know some new peers: source(creator), relayedBy(sender) and destinition of the packet
-		//	0.2 FIXME: we dont know any other infos for `SetRoutingEntry`? we only know that RelayedBy or Source -> me routing
-		// FIXME: AddPeer only add neighbor nodes or not?
-		// what do we know?
-		// 	- relayedBy is near us relayedBy:relayedBy (if relayedBy is empty, then source is near us)
 		n.addNeighbor(pack.Header.RelayedBy) // we can only ensure that relay is near us
 
 		// 1. must check if the message is truly for the node
@@ -219,7 +214,6 @@ func (n *node) Stop() error {
 	// panic("to be implemented in HW0")
 	n.Info().Msg("Stoping...")
 	atomic.StoreInt32(&n.stat, KILL)
-	// FIXME: shall we close the socket?
 	return nil
 }
 
@@ -259,25 +253,6 @@ func (n *node) send(pkt transport.Packet) (string, error) {
 	return nextDest, nil
 }
 
-// func (n *node) sendTimeout(pkt transport.Packet, timeout time.Duration) (string, error) {
-// 	done := make(chan int, 1)
-// 	var nextDest string
-// 	var err error
-// 	go func() {
-// 		nextDest, err = n.send(pkt)
-// 		done <- 0
-// 	}()
-// 	select {
-// 	case <-done:
-// 		if err != nil {
-// 			return nextDest, fmt.Errorf("send error: %w", err)
-// 		}
-// 		return nextDest, nil
-// 	case <-time.After(timeout):
-// 		return "", transport.TimeoutErr(timeout)
-// 	}
-// }
-
 // Unicast implements peer.Messaging
 // send to itself is naturally supported by UDP
 func (n *node) Unicast(dest string, msg transport.Message) error {
@@ -300,7 +275,6 @@ func (n *node) Unicast(dest string, msg transport.Message) error {
 // must not send the message to itself
 // but still process it
 func (n *node) Broadcast(msg transport.Message) error {
-	// TODO: can I first process the message?
 	n.Debug().Msg("start to broadcast")
 	// 0. process the embeded message
 	_header := transport.NewHeader(n.addr(), n.addr(), n.addr(), 0)
@@ -316,8 +290,7 @@ func (n *node) Broadcast(msg transport.Message) error {
 
 	// 1. wrap a RumorMessage, and send it through the socket to one random neighbor
 	// once the seq is added and Rumor is constructed, this Rumor is gurantted to
-	// be sent out(ACK). So we dont need to worry about inconsistency of seq.
-	// TODO: but there still some send/marshal error that would cause the problem of early return
+	// be sent(whether by broadcast or statusMsg)
 
 	n.seqMu.Lock()
 	// fetch my last seq and increase it
@@ -339,7 +312,6 @@ func (n *node) Broadcast(msg transport.Message) error {
 		return nil
 	}
 
-	// TODO: MarshalMessage 有问题是否应该直接 panic?
 	ruMsg, err := n.msgRegistry.MarshalMessage(&types.RumorsMessage{Rumors: []types.Rumor{ru}})
 	if err != nil {
 		n.Err(err).Send()
@@ -353,7 +325,6 @@ func (n *node) Broadcast(msg transport.Message) error {
 		acked := false
 		for tried < 2 && !acked {
 			tried++
-			// TODO: what should be ttl?
 			// ensure the randNeigh is not previous one
 			// if has only one neighbor, then randNeighExcept will return this only neighbor
 			randNei := n.randNeighExcept(preNei)
@@ -362,7 +333,6 @@ func (n *node) Broadcast(msg transport.Message) error {
 			preNei = randNei
 			// create and register the future before send, such that AckCallback will always happens after future register
 			// create ack future, it is a buffered channel, such that ack after timeout do not block on sending on future
-			// TODO: 总结一下, 差点又犯了 happens before 的假设错误
 			future := make(chan int, 1)
 			n.acuMu.Lock()
 			n.ackFutures[pkt.Header.PacketID] = future
@@ -373,7 +343,7 @@ func (n *node) Broadcast(msg transport.Message) error {
 			nextDest, err := n.send(pkt)
 			if err != nil {
 				n.Err(fmt.Errorf("Broadcast error: %w", err)).Send()
-				// TODO: this early return did not delete entries
+				// FIXME: this early return did not delete entries
 				return
 			}
 			n.Debug().Str("dest", header.Destination).Str("nextDest", nextDest).Str("msg", ruMsg.String()).Str("pkt", pkt.String()).Msg("possibly sended")
@@ -399,8 +369,6 @@ func (n *node) Broadcast(msg transport.Message) error {
 	return nil
 }
 
-// TODO: neighbor add should deduplicate
-// TODO: status should only contains valid(cannot [])
 // AddPeer implements peer.Service
 func (n *node) AddPeer(addr ...string) {
 	n.mu.Lock()
@@ -476,7 +444,6 @@ func (n *node) addr() string {
 // rumor process 讨论: 每一个 origin 的 rumor 一定是按序 process 的, 并且不会有任何的 race
 // rumor: it only embed higher-level message. It will not embed rumors, status, ack etc.
 
-// 这个方法非常关键, 因为涉及到 seqs 相关的更新, 处理不好就会造成 inconsistency
 // Q: seqs update shall onReceived or onProcessed?
 // A: currently onReceived. Because received req is guaranteed to be processed eventually.
 func (n *node) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error {
@@ -576,7 +543,6 @@ func (n *node) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error 
 		return nil
 	}
 
-	// TODO: what about the ttl?
 	// here we create a new packet and use this node as source, since this is a re-send rather than routing
 	// dont need to check neighbor, otherwise we cannot receive this message.
 	randNei := n.randNeighExcept(pkt.Header.RelayedBy)
@@ -725,8 +691,7 @@ func (n *node) AckMsgCallback(msg types.Message, pkt transport.Packet) error {
 		n.Info().Msgf("packet %s has no future to complete", pkt.Header.PacketID)
 	}
 
-	// TODO: if already timeouted, shall we process the StatusMessage?
-	// TODO: too many Marshalcall and error checking
+	// FIXME: too many Marshalcall and error checking
 	status, err := n.msgRegistry.MarshalMessage(&ack.Status)
 	if err != nil {
 		n.Err(err).Send()
@@ -747,7 +712,6 @@ func (n *node) AckMsgCallback(msg types.Message, pkt transport.Packet) error {
 	return nil
 }
 
-// TODO: callbacks shall not print, rather just return the err
 func (n *node) PrivateMsgCallback(msg types.Message, pkt transport.Packet) error {
 	private := msg.(*types.PrivateMessage)
 	if _, ok := private.Recipients[n.addr()]; !ok {
@@ -765,7 +729,7 @@ func (n *node) PrivateMsgCallback(msg types.Message, pkt transport.Packet) error
 }
 
 // neighbors access shall be protected,
-// TODO: shall it share the same lock with routeMutex?
+// FIXME: shall it share the same lock with routeMutex?
 func (n *node) randNeigh() string {
 	n.mu.Lock()
 	defer n.mu.Unlock()
