@@ -1,9 +1,15 @@
 package impl
 
 import (
+	"bytes"
+	"crypto"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,6 +17,7 @@ import (
 	"github.com/rs/zerolog"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/registry"
+	"go.dedis.ch/cs438/storage"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 )
@@ -40,6 +47,8 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	// here you must return a struct that implements the peer.Peer functions.
 	// Therefore, you are free to rename and change it as you want.
 	node := &node{sock: conf.Socket, msgRegistry: conf.MessageRegistry, id: uniqueID(), conf: conf}
+	node.blob = conf.Storage.GetDataBlobStore()
+	node.nameing = conf.Storage.GetNamingStore()
 	// init the routing table, add this.addr
 	node.route = peer.RoutingTable{node.addr(): node.addr()}
 	node.seqs = make(map[string]uint)
@@ -68,6 +77,10 @@ type node struct {
 	sock        transport.Socket
 	msgRegistry registry.Registry
 	conf        peer.Configuration
+
+	// storage
+	blob    storage.Store
+	nameing storage.Store
 
 	// id          xid.ID
 	// unique id, xid.ID is not human friendly
@@ -139,6 +152,113 @@ func (n *node) send(pkt transport.Packet) (string, error) {
 		return nextDest, fmt.Errorf("send error: %w", err)
 	}
 	return nextDest, nil
+}
+
+// func hexHash(data []byte) (string, error) {
+// 	h := crypto.SHA256.New()
+// 	if _, err := h.Write(data); err != nil {
+// 		return "", err
+// 	}
+// 	return hex.EncodeToString(h.Sum(nil)), nil
+// }
+
+func sha256(data []byte) ([]byte, error) {
+	h := crypto.SHA256.New()
+	if _, err := h.Write(data); err != nil {
+		return []byte{}, err
+	}
+	return h.Sum(nil), nil
+}
+
+// Upload stores a new data blob on the peer and will make it available to
+// other peers. The blob will be split into chunks.
+func (n *node) Upload(data io.Reader) (string, error) {
+	// split the file into chunks
+	// store the chunk, where the hash-code as the key to index it
+	// store the metafile,
+	chunks := make(map[string][]byte)
+	chunkShaKeys := make([][]byte, 0, 10)
+	chunkHexKeys := make([]string, 0, 10)
+
+	chunkBuf := make([]byte, 0, n.conf.ChunkSize) // chunkBuf, which will be reused
+	reachEOF := false
+	budget := int(n.conf.ChunkSize)
+	readBuf := make([]byte, budget)
+
+	// assemble chunks, it should handle potential partial read
+	for !reachEOF {
+		nRead, err := data.Read(readBuf)
+		chunkBuf = append(chunkBuf, readBuf[:nRead]...)
+
+		if len(chunkBuf) == int(n.conf.ChunkSize) {
+			chunk := make([]byte, len(chunkBuf))
+			copy(chunk, chunkBuf)
+			chunksha, err := sha256(chunk)
+			chunkhash := hex.EncodeToString(chunksha)
+			if err != nil {
+				err = fmt.Errorf("Upload error: %w", err)
+				n.Err(err).Send()
+				return "", err
+			}
+			chunks[chunkhash] = chunk
+			chunkShaKeys = append(chunkShaKeys, chunksha)
+			chunkHexKeys = append(chunkHexKeys, chunkhash)
+
+			// flush buffers
+			budget = int(n.conf.ChunkSize)
+			chunkBuf = chunkBuf[:0]
+			readBuf = readBuf[:budget]
+		} else {
+			// flush readBuf and limit its budget to only fetch remaining part of a chunk
+			budget -= nRead
+			readBuf = readBuf[:budget]
+		}
+
+		// reach EOF, break loop
+		if errors.Is(err, io.EOF) {
+			// flush current valid chunk
+			if len(chunkBuf) > 0 {
+				chunk := make([]byte, len(chunkBuf))
+				copy(chunk, chunkBuf)
+				chunkBuf = chunkBuf[:0]
+				chunksha, err := sha256(chunk)
+				chunkhash := hex.EncodeToString(chunksha)
+				if err != nil {
+					err = fmt.Errorf("Upload error when hash chunk key: %w", err)
+					n.Err(err).Send()
+					return "", err
+				}
+				chunks[chunkhash] = chunk
+				chunkShaKeys = append(chunkShaKeys, chunksha)
+				chunkHexKeys = append(chunkHexKeys, chunkhash)
+
+			}
+			reachEOF = true
+		} else if err != nil {
+			err = fmt.Errorf("Upload error in read: %w", err)
+			n.Err(err).Send()
+			return "", err
+		}
+
+	}
+	// we have assembled chunks, then we assemble the metafile
+	metafileValue := strings.Join(chunkHexKeys, peer.MetafileSep)
+	metafileKeySha, err := sha256(bytes.Join(chunkShaKeys, []byte{}))
+	metafileKey := hex.EncodeToString(metafileKeySha)
+
+	if err != nil {
+		err = fmt.Errorf("Upload error when hash metafile key: %w", err)
+		n.Err(err).Send()
+		return "", err
+	}
+
+	// store chunks and metafile
+	for key, value := range chunks {
+		n.blob.Set(key, value)
+	}
+	n.blob.Set(metafileKey, []byte(metafileValue))
+
+	return metafileKey, nil
 }
 
 // Unicast implements peer.Messaging
