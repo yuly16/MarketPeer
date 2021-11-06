@@ -19,7 +19,7 @@ func (n *node) strictUnicast(dest string, msg transport.Message) error {
 
 	nextDest, err := n.strictSend(pkt)
 	if err != nil {
-		err = fmt.Errorf("Unicast error: %w", err)
+		err = fmt.Errorf("strictUnicast error: %w", err)
 		n.Err(err).Send()
 	}
 	n.Debug().Str("dest", dest).Str("nextDest", nextDest).Str("msg", msg.String()).Str("pkt", pkt.String()).Msg("unicast packet sended")
@@ -59,6 +59,16 @@ func (n *node) strictNextHop(dest string) (string, error) {
 	return nextDest, err
 }
 
+// no need to check routing table
+func (n *node) forceSend(peer string, pkt transport.Packet) error {
+	// send the pkt
+	err := n.sock.Send(peer, pkt, 0)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // blocking send a packet, target is decided by the routing table
 // return `nextDest` and error
 func (n *node) send(pkt transport.Packet) (string, error) {
@@ -69,9 +79,8 @@ func (n *node) send(pkt transport.Packet) (string, error) {
 	if err != nil {
 		return nextDest, fmt.Errorf("send error: %w", err)
 	}
-
-	// send the pkt
-	err = n.sock.Send(nextDest, pkt, 0)
+	// send the packet
+	err = n.forceSend(nextDest, pkt)
 	if err != nil {
 		return nextDest, fmt.Errorf("send error: %w", err)
 	}
@@ -110,7 +119,7 @@ func (n *node) AddPeer(addr ...string) {
 		}
 
 	}
-	n.Debug().Str("route", n.route.String()).Str("neighbors", fmt.Sprintf("%v", n.neighbors)).Msg("after added")
+	n.Trace().Str("route", n.route.String()).Str("neighbors", fmt.Sprintf("%v", n.neighbors)).Msg("after added")
 }
 
 func (n *node) addNeighbor(addr ...string) {
@@ -118,7 +127,7 @@ func (n *node) addNeighbor(addr ...string) {
 	defer n.mu.Unlock()
 	// we could directly reach the peers
 	// NOTE: adding ourselves should have no effects
-	n.Info().Strs("peers", addr).Msg("adding peers")
+	n.Trace().Strs("peers", addr).Msg("adding peers")
 	for i := 0; i < len(addr); i++ {
 		if _, ok := n.neighborSet[addr[i]]; !ok {
 			n.neighborSet[addr[i]] = struct{}{}
@@ -126,7 +135,7 @@ func (n *node) addNeighbor(addr ...string) {
 		}
 
 	}
-	n.Debug().Str("neighbors", fmt.Sprintf("%v", n.neighbors)).Msg("after neighbor added")
+	n.Trace().Str("neighbors", fmt.Sprintf("%v", n.neighbors)).Msg("after neighbor added")
 }
 
 // GetRoutingTable implements peer.Service
@@ -198,4 +207,33 @@ func (n *node) isNeighbor(addr string) bool {
 		}
 	}
 	return false
+}
+
+func (n *node) getNeisExcept(excepts ...string) []string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	ret := make([]string, 0, len(n.neighbors))
+	for _, nei := range n.neighbors {
+		filtered := false
+		for _, except := range excepts {
+			if except == nei {
+				filtered = true
+				break
+			}
+		}
+		if !filtered {
+			ret = append(ret, nei)
+		}
+	}
+	return ret
+}
+
+func (n *node) getNeis() []string {
+	return n.getNeisExcept(NONEIGHBOR)
+}
+
+func (n *node) neighborLen() int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return len(n.neighbors)
 }

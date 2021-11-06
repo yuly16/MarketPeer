@@ -64,7 +64,7 @@ type SearchReplyMessage struct {
 // - implemented in HW2
 type FileInfo struct {
 	Name     string
-	Metahash string
+	Metahash string // file metahash key
 
 	// len(Chunks) must be of the total number of chunks for that file and
 	// chunks must be in order. Missing chunk must be set to nil. For example:

@@ -3,7 +3,10 @@ package impl
 import (
 	"fmt"
 	"math/rand"
+	"regexp"
+	"strings"
 
+	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 )
@@ -312,11 +315,11 @@ func (n *node) DataReplyMessageCallback(msg types.Message, pkt transport.Packet)
 		future <- reply.Value
 	} else {
 		// do nothing, it is a arrive-late ack msg
-		n.Info().Msgf("packet %s has no future to complete", pkt.Header.PacketID)
+		n.Info().Msgf("data reply(%s) packet %s has no future to complete", reply.RequestID, pkt.Header.PacketID)
 	}
 
 	// store the element to its local blob storage
-	// TODO: what if the future ok=false? or at some edge cases?
+	// TODO: what if the future ok=false? or at some edge cases? it's a late reply case
 	n.blob.Set(reply.Key, reply.Value)
 	return nil
 }
@@ -332,6 +335,113 @@ func (n *node) DataRequestMessageCallback(msg types.Message, pkt transport.Packe
 	}
 	err = n.strictUnicast(pkt.Header.Source, reply)
 	if err != nil {
+		n.Err(err).Send()
+		return err
+	}
+
+	return nil
+}
+
+func (n *node) SearchReplyMessageCallback(msg types.Message, pkt transport.Packet) error {
+	n.Warn().Msg("start search reply callback")
+	reply := msg.(*types.SearchReplyMessage)
+	n.searchReplyMu.Lock()
+	future, ok := n.searchReplyFutures[reply.RequestID]
+	n.searchReplyMu.Unlock()
+
+	if ok {
+		n.Info().Msgf("notify search reply future %s", reply.RequestID)
+
+		future <- reply
+	} else {
+		// do nothing, it is a arrive-late ack msg
+		n.Info().Msgf("search reply(%s) packet %s has no future to complete", reply.RequestID, pkt.Header.PacketID)
+	}
+
+	// store the element to its local blob storage
+	// update naming store
+	// update catalog
+	// TODO: what if the future ok=false? or at some edge cases? it's a late reply
+	// TODO: why don't we update the blob? we have metahash and chunks already?
+	for _, file := range reply.Responses {
+		n.naming.Set(file.Name, []byte(file.Metahash))
+		n.UpdateCatalog(file.Metahash, pkt.Header.Source)
+		for _, chunkKey := range file.Chunks {
+			if chunkKey == nil {
+				continue
+			}
+			n.UpdateCatalog(string(chunkKey), pkt.Header.Source)
+		}
+	}
+	return nil
+}
+
+func (n *node) SearchRequestMessageCallback(msg types.Message, pkt transport.Packet) error {
+	n.Debug().Msg("start search request callback")
+	req := msg.(*types.SearchRequestMessage)
+
+	n.searchReqsMu.Lock()
+	if _, ok := n.searchReqs[req.RequestID]; ok {
+		n.Debug().Msgf("search req %s already received, skip callback", req.RequestID)
+		n.searchReqsMu.Unlock()
+		return nil
+	} else {
+		n.searchReqs[req.RequestID] = struct{}{}
+	}
+	n.searchReqsMu.Unlock()
+	// forward the req if budget permits
+	newBudget := req.Budget - 1
+	if newBudget > 0 {
+		// TODO: shall we dont send back to lastRelayedBy and Origin?
+		neis := n.getNeisExcept(pkt.Header.RelayedBy, req.Origin)
+		neis, budgets := budgetAllocation(neis, newBudget)
+		n.Debug().Msgf("started to forwarding search request to neighbors=%v, buds=%v", neis, budgets)
+		for i := range neis {
+			nei, bud := neis[i], budgets[i]
+			newReq_ := types.SearchRequestMessage{
+				RequestID: req.RequestID, Origin: req.Origin, Pattern: req.Pattern, Budget: bud}
+			if err := n.unicastTypesMsg(nei, &newReq_); err != nil {
+				err = fmt.Errorf("SearchRequestMessageCallback error: %w", err)
+				n.Err(err).Send()
+				return err
+			}
+		}
+	}
+	// check naming store and construct reply message
+	// the naming should also be in the blob store
+	matches := make([]types.FileInfo, 0, 10)
+	reg := regexp.MustCompile(req.Pattern)
+	n.naming.ForEach(func(key string, val []byte) bool {
+		// key is file name; val is metahash
+		// only when peer contains metafile with regards to the metahash shall we return the information
+		if metafile := n.blob.Get(string(val)); reg.MatchString(key) && metafile != nil {
+			file := types.FileInfo{Name: key, Metahash: string(val)}
+			// parse metafile and fill the chunks, chunks actually contains hashKeys
+			// but only if peer has value, shall we include this hashkey
+			chunkHashKeys := strings.Split(string(metafile), peer.MetafileSep)
+			chunks := make([][]byte, 0, len(chunkHashKeys))
+			for _, chunkKey := range chunkHashKeys {
+				// chunks = append(chunks, n.blob.Get(chunkKey))
+				if n.blob.Get(chunkKey) != nil {
+					chunks = append(chunks, []byte(chunkKey))
+				} else {
+					chunks = append(chunks, nil)
+				}
+			}
+			file.Chunks = chunks
+			n.Debug().Msgf("file %s matched pattern, metaHash=%s, metafile=%s, chunks=%v", key, string(val), string(metafile), len(chunks))
+			// TODO: shall we fill chunks?
+			matches = append(matches, file)
+		}
+		return true
+	})
+	n.Debug().Msgf("search reply matches constructed %v, will send it back", matches)
+	reply := types.SearchReplyMessage{RequestID: req.RequestID, Responses: matches}
+	// TODO: a lot of things could be substed
+	// TODO: here it requires direct send bypassing routing table, and it could be sent back to
+	//       the relayed by or original. if original, how could we bypass the routing table?
+	if err := n.forceUnicastTypesMsg(req.Origin, &reply); err != nil {
+		err = fmt.Errorf("SearchRequestMessageCallback error: %w", err)
 		n.Err(err).Send()
 		return err
 	}
