@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/rs/xid"
 	"github.com/rs/zerolog"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/registry"
@@ -48,7 +51,9 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	// Therefore, you are free to rename and change it as you want.
 	node := &node{sock: conf.Socket, msgRegistry: conf.MessageRegistry, id: uniqueID(), conf: conf}
 	node.blob = conf.Storage.GetDataBlobStore()
-	node.nameing = conf.Storage.GetNamingStore()
+	node.naming = conf.Storage.GetNamingStore()
+	node.catalog = peer.Catalog(make(map[string]map[string]struct{}))
+	node.replyFutures = make(map[string]chan []byte)
 	// init the routing table, add this.addr
 	node.route = peer.RoutingTable{node.addr(): node.addr()}
 	node.seqs = make(map[string]uint)
@@ -80,7 +85,8 @@ type node struct {
 
 	// storage
 	blob    storage.Store
-	nameing storage.Store
+	naming  storage.Store
+	catalog peer.Catalog
 
 	// id          xid.ID
 	// unique id, xid.ID is not human friendly
@@ -89,13 +95,15 @@ type node struct {
 	acuMu      sync.Mutex
 	ackFutures map[string]chan int
 
+	replyMu      sync.Mutex
+	replyFutures map[string]chan []byte
+
 	mu          sync.Mutex // protect access to `route` and `neighbors`, for example, listenDaemon and Unicast, redirect will access it
 	neighbors   []string   // it will only grow, since no node will leave the network in assumption
 	neighborSet map[string]struct{}
 	route       peer.RoutingTable
 
-	stat int32
-
+	stat   int32
 	seqMu  sync.Mutex               // protect seqs and rumors
 	seqs   map[string]uint          // rumor seq of other nodes, here nodes are not necessarily the neighbors, since rumor corresponds to one origin
 	rumors map[string][]types.Rumor // key: node_addr value: rumors in increasing order of seq
@@ -117,6 +125,10 @@ func (n *node) Start() error {
 	n.Info().Msg("register callback for `EmptyMessage`")
 	n.msgRegistry.RegisterMessageCallback(types.PrivateMessage{}, n.PrivateMsgCallback)
 	n.Info().Msg("register callback for `PrivateMessage`")
+	n.msgRegistry.RegisterMessageCallback(types.DataRequestMessage{}, n.DataRequestMessageCallback)
+	n.Info().Msg("register callback for `DataRequestMessage`")
+	n.msgRegistry.RegisterMessageCallback(types.DataReplyMessage{}, n.DataReplyMessageCallback)
+	n.Info().Msg("register callback for `DataReplyMessage`")
 	// start a listining daemon to listen on the incoming message with `sock`
 	n.Info().Msg("loading daemons...")
 	go n.listenDaemon()
@@ -135,32 +147,30 @@ func (n *node) Stop() error {
 	return nil
 }
 
-// blocking send a packet, target is decided by the routing table
-// return `nextDest` and error
-func (n *node) send(pkt transport.Packet) (string, error) {
-	// 1. source should not be changed
-	// 2. relay=me
-	// 3. dest should de decided by the routing table
-	nextDest, err := n.nextHop(pkt.Header.Destination)
-	if err != nil {
-		return nextDest, fmt.Errorf("send error: %w", err)
-	}
+// SearchAll returns all the names that exist matching the given regex. It
+// merges results from the local storage and from the search request reply
+// sent to a random neighbor using the provided budget. It makes the peer
+// update its catalog and name storage according to the SearchReplyMessages
+// received. Returns an empty result if nothing found. An error is returned
+// in case of an exceptional event.
+func (n *node) SearchAll(reg regexp.Regexp, budget uint, timeout time.Duration) ([]string, error) {
 
-	// send the pkt
-	err = n.sock.Send(nextDest, pkt, 0)
-	if err != nil {
-		return nextDest, fmt.Errorf("send error: %w", err)
-	}
-	return nextDest, nil
+	return nil, nil
 }
 
-// func hexHash(data []byte) (string, error) {
-// 	h := crypto.SHA256.New()
-// 	if _, err := h.Write(data); err != nil {
-// 		return "", err
-// 	}
-// 	return hex.EncodeToString(h.Sum(nil)), nil
-// }
+// Tag creates a mapping between a (file)name and a metahash.
+//
+func (n *node) Tag(name string, mh string) error {
+	n.naming.Set(name, []byte(mh))
+	return nil
+}
+
+// Resolve returns the corresponding metahash of a given (file)name. Returns
+// an empty string if not found.
+func (n *node) Resolve(name string) string {
+	metahash := n.naming.Get(name)
+	return string(metahash)
+}
 
 func sha256(data []byte) ([]byte, error) {
 	h := crypto.SHA256.New()
@@ -168,6 +178,119 @@ func sha256(data []byte) ([]byte, error) {
 		return []byte{}, err
 	}
 	return h.Sum(nil), nil
+}
+
+func (n *node) GetCatalog() peer.Catalog {
+	// TODO: is it safe? is it thread safe
+	return n.catalog
+}
+
+func (n *node) UpdateCatalog(key string, peer string) {
+	// TODO: is it thread-safe?
+	n.Info().Msgf("add key=%s, peer=%s in catalog", key, peer)
+	if peers, ok := n.catalog[key]; ok {
+		peers[peer] = struct{}{}
+	} else {
+		n.catalog[key] = make(map[string]struct{})
+		n.catalog[key][peer] = struct{}{}
+	}
+}
+
+func (n *node) dataReplyFuture(reqID string) chan []byte {
+	// TODO: when to delete it?
+	ret := make(chan []byte, 1)
+	n.replyMu.Lock()
+	n.replyFutures[reqID] = ret
+	n.replyMu.Unlock()
+	return ret
+}
+
+func (n *node) deleteReplyFuture(reqID string) {
+	n.replyMu.Lock()
+	delete(n.replyFutures, reqID)
+	n.replyMu.Unlock()
+}
+
+func (n *node) download(hexhash string) ([]byte, error) {
+	if content := n.blob.Get(hexhash); content != nil {
+		return content, nil
+	}
+
+	if peersSet, ok := n.catalog[hexhash]; ok {
+		// select a random peer and send DataRequestMessage
+		peers := make([]string, 0, len(peersSet))
+		for k := range peersSet {
+			peers = append(peers, k)
+		}
+		peer := peers[rand.Int63n(int64(len(peers)))]
+
+		// back off strategy
+		waitTime := n.conf.BackoffDataRequest.Initial
+		for i := 0; i < int(n.conf.BackoffDataRequest.Retry); i++ {
+			// TODO: shall we use different reqID? or we should use same reqID?
+			reqID := xid.New().String()
+			msg_ := types.DataRequestMessage{RequestID: reqID, Key: hexhash}
+			msg, err := n.msgRegistry.MarshalMessage(&msg_)
+
+			if err != nil {
+				return nil, err
+			}
+
+			replyFuture := n.dataReplyFuture(reqID)
+			if err = n.Unicast(peer, msg); err != nil {
+				n.deleteReplyFuture(reqID)
+				return nil, err
+			}
+
+			// wait for the DataReplyMessage
+			select {
+			case <-time.After(waitTime):
+				// wait for next backoff time, what about reqID?
+				n.Info().Msgf("waitTime=%v elapsed, backoff for %s", waitTime, reqID)
+			case content := <-replyFuture:
+				if len(content) == 0 {
+					return nil, fmt.Errorf("neighbor %s does not have %s", peer, hexhash)
+				}
+				n.Info().Msgf("receive content for req %s", reqID)
+				return content, nil
+			}
+			// delete registered future, to avoid infinite growth of the map
+			n.deleteReplyFuture(reqID)
+			waitTime *= time.Duration(n.conf.BackoffDataRequest.Factor)
+		}
+
+		return nil, fmt.Errorf("backoff timeout")
+
+	}
+	return nil, fmt.Errorf("no one has the file")
+}
+
+// Download will get all the necessary chunks corresponding to the given
+// metahash that references a blob, and return a reconstructed blob. The
+// peer will save locally the chunks that it doesn't have for further
+// sharing. Returns an error if it can't get the necessary chunks.
+func (n *node) Download(metahash string) ([]byte, error) {
+	// 1. fetch metahash
+	metaContent, err := n.download(metahash)
+	if err != nil {
+		err = fmt.Errorf("Download error: %w", err)
+		n.Err(err).Send()
+		return nil, err
+	}
+	// 2. parse chunks metahash key from metafile and fetch the chunks
+	chunkHexHashs := strings.Split(string(metaContent), peer.MetafileSep)
+	chunks := make([][]byte, len(chunkHexHashs))
+	for _, chunkHexHash := range chunkHexHashs {
+		chunkContent, err := n.download(chunkHexHash)
+		if err != nil {
+			err = fmt.Errorf("Download error: %w", err)
+			n.Err(err).Send()
+			return nil, err
+		}
+		chunks = append(chunks, chunkContent)
+	}
+
+	return bytes.Join(chunks, []byte{}), nil
 }
 
 // Upload stores a new data blob on the peer and will make it available to

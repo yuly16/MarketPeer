@@ -5,7 +5,78 @@ import (
 	"math/rand"
 
 	"go.dedis.ch/cs438/peer"
+	"go.dedis.ch/cs438/transport"
 )
+
+// Unicast implements peer.Messaging
+// send to itself is naturally supported by UDP
+func (n *node) strictUnicast(dest string, msg transport.Message) error {
+	// assemble a packet
+	// relay shall be self
+	relay := n.addr()
+	header := transport.NewHeader(n.addr(), relay, dest, 0)
+	pkt := transport.Packet{Header: &header, Msg: &msg}
+
+	nextDest, err := n.strictSend(pkt)
+	if err != nil {
+		err = fmt.Errorf("Unicast error: %w", err)
+		n.Err(err).Send()
+	}
+	n.Debug().Str("dest", dest).Str("nextDest", nextDest).Str("msg", msg.String()).Str("pkt", pkt.String()).Msg("unicast packet sended")
+	return err
+}
+
+// blocking send a packet, target is decided by the routing table
+// return `nextDest` and error
+func (n *node) strictSend(pkt transport.Packet) (string, error) {
+	// 1. source should not be changed
+	// 2. relay=me
+	// 3. dest should de decided by the routing table
+	nextDest, err := n.strictNextHop(pkt.Header.Destination)
+	if err != nil {
+		return nextDest, fmt.Errorf("send error: %w", err)
+	}
+
+	// send the pkt
+	err = n.sock.Send(nextDest, pkt, 0)
+	if err != nil {
+		return nextDest, fmt.Errorf("send error: %w", err)
+	}
+	return nextDest, nil
+}
+
+// strictNextHop will not care about neighbors
+func (n *node) strictNextHop(dest string) (string, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	// dest must be known
+	nextDest, ok := n.route[dest]
+	var err error
+	if !ok {
+		err = fmt.Errorf("dest=%s is unknown to me=%s", dest, n.addr())
+	}
+	return nextDest, err
+}
+
+// blocking send a packet, target is decided by the routing table
+// return `nextDest` and error
+func (n *node) send(pkt transport.Packet) (string, error) {
+	// 1. source should not be changed
+	// 2. relay=me
+	// 3. dest should de decided by the routing table
+	nextDest, err := n.nextHop(pkt.Header.Destination)
+	if err != nil {
+		return nextDest, fmt.Errorf("send error: %w", err)
+	}
+
+	// send the pkt
+	err = n.sock.Send(nextDest, pkt, 0)
+	if err != nil {
+		return nextDest, fmt.Errorf("send error: %w", err)
+	}
+	return nextDest, nil
+}
 
 func (n *node) nextHop(dest string) (string, error) {
 	if n.isNeighbor(dest) {

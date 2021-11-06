@@ -298,3 +298,43 @@ func (n *node) PrivateMsgCallback(msg types.Message, pkt transport.Packet) error
 	}
 	return nil
 }
+
+func (n *node) DataReplyMessageCallback(msg types.Message, pkt transport.Packet) error {
+	n.Debug().Msg("start data reply callback")
+	reply := msg.(*types.DataReplyMessage)
+	n.replyMu.Lock()
+	future, ok := n.replyFutures[reply.RequestID]
+	n.replyMu.Unlock()
+
+	if ok {
+		n.Info().Msgf("notify reply future %s", reply.RequestID)
+
+		future <- reply.Value
+	} else {
+		// do nothing, it is a arrive-late ack msg
+		n.Info().Msgf("packet %s has no future to complete", pkt.Header.PacketID)
+	}
+
+	// store the element to its local blob storage
+	// TODO: what if the future ok=false? or at some edge cases?
+	n.blob.Set(reply.Key, reply.Value)
+	return nil
+}
+
+func (n *node) DataRequestMessageCallback(msg types.Message, pkt transport.Packet) error {
+	n.Debug().Msg("start data req callback")
+	req := msg.(*types.DataRequestMessage)
+	reply_ := types.DataReplyMessage{Key: req.Key, RequestID: req.RequestID, Value: n.blob.Get(req.Key)}
+	reply, err := n.msgRegistry.MarshalMessage(&reply_)
+	if err != nil {
+		n.Err(err).Send()
+		return err
+	}
+	err = n.strictUnicast(pkt.Header.Source, reply)
+	if err != nil {
+		n.Err(err).Send()
+		return err
+	}
+
+	return nil
+}
