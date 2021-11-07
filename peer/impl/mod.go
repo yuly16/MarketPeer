@@ -32,7 +32,7 @@ var _logger zerolog.Logger = zerolog.New(
 	With().Timestamp().Logger()
 var _peerCount int32 = -1
 var NONEIGHBOR string = "NONEIGHBOR"
-var ERRNOTFOUND error = errors.New("NOTFOUND")
+var ErrNotFound error = errors.New("NOTFOUND")
 
 // peer state
 const (
@@ -259,7 +259,7 @@ func (n *node) searchAllFromNei(reg regexp.Regexp, budget uint, timeout time.Dur
 
 func (n *node) searchFirstFromNei(reg regexp.Regexp, budget uint, timeout time.Duration) (string, error) {
 	if !n.hasNeighbor() {
-		return "", ERRNOTFOUND
+		return "", ErrNotFound
 	}
 
 	neis := n.getNeis()
@@ -343,10 +343,10 @@ func (n *node) searchFirstFromNei(reg regexp.Regexp, budget uint, timeout time.D
 	select {
 	case <-timer:
 		n.Debug().Msg("searchFirst: timeout before all search reponses are received")
-		return "", ERRNOTFOUND
+		return "", ErrNotFound
 	case <-allFinish:
 		n.Debug().Msg("searchFirst: all search reponses are received, but not find fullyKnownfile")
-		return "", ERRNOTFOUND
+		return "", ErrNotFound
 	case <-findFullKnown:
 		n.Debug().Msgf("searchFirst find full knownfile: %s", fullKnownName)
 		return fullKnownName, nil
@@ -437,7 +437,7 @@ func (n *node) SearchFirst(reg regexp.Regexp, conf peer.ExpandingRing) (name str
 			n.Info().Msgf("find match=%s from nei, return", match)
 			return match, nil
 		}
-		if err != nil && errors.Is(err, ERRNOTFOUND) {
+		if err != nil && errors.Is(err, ErrNotFound) {
 			n.Info().Msgf("search first fail with budget=%d, retry=%d, try next", budget, i)
 			budget *= conf.Factor
 			continue
@@ -708,16 +708,16 @@ func (n *node) Upload(data io.Reader) (string, error) {
 
 // Note: msg_ has to be a pointer
 // dont go through routing table or neighbor set
-func (n *node) forceUnicastTypesMsg(dest string, msg_ types.Message) error {
-	msg, err := n.msgRegistry.MarshalMessage(msg_)
-	if err != nil {
-		return err
-	}
-	relay := n.addr()
-	header := transport.NewHeader(n.addr(), relay, dest, 0)
-	pkt := transport.Packet{Header: &header, Msg: &msg}
-	return n.forceSend(dest, pkt)
-}
+// func (n *node) forceUnicastTypesMsg(dest string, msg_ types.Message) error {
+// 	msg, err := n.msgRegistry.MarshalMessage(msg_)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	relay := n.addr()
+// 	header := transport.NewHeader(n.addr(), relay, dest, 0)
+// 	pkt := transport.Packet{Header: &header, Msg: &msg}
+// 	return n.forceSend(dest, pkt)
+// }
 
 // Note: msg_ has to be a pointer
 func (n *node) unicastTypesMsg(dest string, msg_ types.Message) error {

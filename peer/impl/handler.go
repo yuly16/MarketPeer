@@ -379,6 +379,8 @@ func (n *node) SearchReplyMessageCallback(msg types.Message, pkt transport.Packe
 func (n *node) SearchRequestMessageCallback(msg types.Message, pkt transport.Packet) error {
 	n.Debug().Msg("start search request callback")
 	req := msg.(*types.SearchRequestMessage)
+	// update routing table
+	n.SetRoutingEntry(req.Origin, pkt.Header.RelayedBy)
 
 	n.searchReqsMu.Lock()
 	if _, ok := n.searchReqs[req.RequestID]; ok {
@@ -440,7 +442,7 @@ func (n *node) SearchRequestMessageCallback(msg types.Message, pkt transport.Pac
 	// TODO: a lot of things could be substed
 	// TODO: here it requires direct send bypassing routing table, and it could be sent back to
 	//       the relayed by or original. if original, how could we bypass the routing table?
-	if err := n.forceUnicastTypesMsg(req.Origin, &reply); err != nil {
+	if err := n.unicastTypesMsg(req.Origin, &reply); err != nil {
 		err = fmt.Errorf("SearchRequestMessageCallback error: %w", err)
 		n.Err(err).Send()
 		return err

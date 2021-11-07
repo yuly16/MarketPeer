@@ -232,8 +232,8 @@ func (n *node) getNeis() []string {
 	return n.getNeisExcept(NONEIGHBOR)
 }
 
-func (n *node) neighborLen() int {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	return len(n.neighbors)
-}
+// func (n *node) neighborLen() int {
+// 	n.mu.Lock()
+// 	defer n.mu.Unlock()
+// 	return len(n.neighbors)
+// }
