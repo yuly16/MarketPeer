@@ -483,7 +483,11 @@ func (n *node) GetCatalog() peer.Catalog {
 	defer n.cataMu.Unlock()
 	ret := make(map[string]map[string]struct{})
 	for k, v := range n.catalog {
-		ret[k] = v
+		copyV := make(map[string]struct{})
+		for peer := range v {
+			copyV[peer] = struct{}{}
+		}
+		ret[k] = copyV
 	}
 	return ret
 }

@@ -309,6 +309,10 @@ func (n *node) DataReplyMessageCallback(msg types.Message, pkt transport.Packet)
 	future, ok := n.replyFutures[reply.RequestID]
 	n.replyMu.Unlock()
 
+	// store the element to its local blob storage
+	// TODO: what if the future ok=false? or at some edge cases? it's a late reply case
+	n.blob.Set(reply.Key, reply.Value)
+
 	if ok {
 		n.Info().Msgf("notify reply future %s", reply.RequestID)
 
@@ -318,9 +322,6 @@ func (n *node) DataReplyMessageCallback(msg types.Message, pkt transport.Packet)
 		n.Info().Msgf("data reply(%s) packet %s has no future to complete", reply.RequestID, pkt.Header.PacketID)
 	}
 
-	// store the element to its local blob storage
-	// TODO: what if the future ok=false? or at some edge cases? it's a late reply case
-	n.blob.Set(reply.Key, reply.Value)
 	return nil
 }
 
@@ -349,15 +350,8 @@ func (n *node) SearchReplyMessageCallback(msg types.Message, pkt transport.Packe
 	future, ok := n.searchReplyFutures[reply.RequestID]
 	n.searchReplyMu.Unlock()
 
-	if ok {
-		n.Info().Msgf("notify search reply future %s", reply.RequestID)
-
-		future <- reply
-	} else {
-		// do nothing, it is a arrive-late ack msg
-		n.Info().Msgf("search reply(%s) packet %s has no future to complete", reply.RequestID, pkt.Header.PacketID)
-	}
-
+	// Note: we should do the update before signal the future. otherwise tester
+	// might use GetCataLog to get a stale result.
 	// store the element to its local blob storage
 	// update naming store
 	// update catalog
@@ -373,6 +367,16 @@ func (n *node) SearchReplyMessageCallback(msg types.Message, pkt transport.Packe
 			n.UpdateCatalog(string(chunkKey), pkt.Header.Source)
 		}
 	}
+
+	if ok {
+		n.Info().Msgf("notify search reply future %s", reply.RequestID)
+
+		future <- reply
+	} else {
+		// do nothing, it is a arrive-late ack msg
+		n.Info().Msgf("search reply(%s) packet %s has no future to complete", reply.RequestID, pkt.Header.PacketID)
+	}
+
 	return nil
 }
 
