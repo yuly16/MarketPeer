@@ -32,6 +32,7 @@ var _logger zerolog.Logger = zerolog.New(
 	With().Timestamp().Logger()
 var _peerCount int32 = -1
 var NONEIGHBOR string = "NONEIGHBOR"
+var ERRNOTFOUND error = errors.New("NOTFOUND")
 
 // peer state
 const (
@@ -256,6 +257,102 @@ func (n *node) searchAllFromNei(reg regexp.Regexp, budget uint, timeout time.Dur
 	return names, nil
 }
 
+func (n *node) searchFirstFromNei(reg regexp.Regexp, budget uint, timeout time.Duration) (string, error) {
+	if !n.hasNeighbor() {
+		return "", ERRNOTFOUND
+	}
+
+	neis := n.getNeis()
+	neis, budegts := budgetAllocation(neis, budget)
+	n.Debug().Stack().Msgf("searchFirst neis=%v, budgets=%v", neis, budegts)
+
+	// now we have neis and associated budgets, we could send SearchRequest
+	fullKnownName := ""
+
+	// allFinish := make(chan struct{}, 1)
+	timer_ := time.After(timeout)
+	timer := make(chan struct{}, 1) // this timer could signal multiple select
+	go func() {
+		<-timer_
+		close(timer)
+	}()
+
+	// control channels
+	findFullKnown := make(chan struct{}, 1)
+	allFinish := make(chan struct{})
+
+	// ideally, we would receive #budget reponses
+	// TODO: there would be edge cases, A<->B, budget=10, for example
+	var finishes sync.WaitGroup
+	finishes.Add(int(budget))
+
+	go func() {
+		// TODO: it might hang
+		finishes.Wait()
+		allFinish <- struct{}{}
+	}()
+
+	reqID := xid.New().String()
+	n.searchReqsMu.Lock()
+	n.searchReqs[reqID] = struct{}{} // itself knows this reqID
+	n.searchReqsMu.Unlock()
+
+	// construct a future
+	future := n.searchReplyFuture(reqID)
+	for i := range neis {
+		nei, bud := neis[i], budegts[i]
+		req_ := types.SearchRequestMessage{RequestID: reqID, Origin: n.addr(), Pattern: reg.String(), Budget: bud}
+		if err := n.unicastTypesMsg(nei, &req_); err != nil {
+			return "", err
+		}
+	}
+	// wait for the future in timeout period
+
+	go func() {
+		for {
+			select {
+			case reply := <-future:
+				n.Warn().Msgf("searchFirst req %s future received, %v", reply.RequestID, *reply)
+				// check if it is a fully matched file
+				for _, file := range reply.Responses {
+					fullKnown := true
+					for _, chunk := range file.Chunks {
+						if chunk == nil {
+							fullKnown = false
+							break
+						}
+					}
+					if fullKnown {
+						// we find the intended fully known file
+						fullKnownName = file.Name
+						findFullKnown <- struct{}{}
+						finishes.Done()
+						return
+					}
+				}
+				finishes.Done()
+			case <-timer:
+				n.deleteSearchReplyFuture(reqID)
+				n.Debug().Msg("timeout, end for loop of search reply receive")
+				return
+			}
+
+		}
+	}()
+
+	select {
+	case <-timer:
+		n.Debug().Msg("searchFirst: timeout before all search reponses are received")
+		return "", ERRNOTFOUND
+	case <-allFinish:
+		n.Debug().Msg("searchFirst: all search reponses are received, but not find fullyKnownfile")
+		return "", ERRNOTFOUND
+	case <-findFullKnown:
+		n.Debug().Msgf("searchFirst find full knownfile: %s", fullKnownName)
+		return fullKnownName, nil
+	}
+}
+
 // SearchAll returns all the names that exist matching the given regex. It
 // merges results from the local storage and from the search request reply
 // sent to a random neighbor using the provided budget. It makes the peer
@@ -289,6 +386,73 @@ func (n *node) SearchAll(reg regexp.Regexp, budget uint, timeout time.Duration) 
 
 	// TODO: error logistics need to be re-checked
 	return matchNames, nil
+}
+
+// SearchFirst uses an expanding ring configuration and returns a name as
+// soon as it finds a peer that "fully matches" a data blob. It makes the
+// peer update its catalog and name storage according to the
+// SearchReplyMessages received. Returns an empty string if nothing was
+// found.
+func (n *node) SearchFirst(reg regexp.Regexp, conf peer.ExpandingRing) (name string, err error) {
+	// first check if local store has a full version of the file
+
+	n.Info().Msgf("start search first reg=%s, conf=%v", reg.String(), conf)
+	// 1. search local naming store
+	localMatched := false
+	matchName := ""
+	n.naming.ForEach(func(name string, metahash []byte) bool {
+		if reg.MatchString(name) {
+			// check if it is a full match
+			// first fetch metafile
+			if metafile := n.blob.Get(string(metahash)); metafile != nil {
+				// parse the chunk keys, then fetch each content seperately
+				chunkKeys := strings.Split(string(metafile), peer.MetafileSep)
+				isFull := true
+				for _, chunkKey := range chunkKeys {
+					chunkValue := n.blob.Get(chunkKey)
+					if chunkValue == nil {
+						isFull = false
+						break
+					}
+				}
+				if isFull {
+					matchName = name
+					localMatched = true
+					return false // stop traversal
+				}
+			}
+		}
+		return true
+	})
+	n.Info().Msgf("after local search, matchName=%v", matchName)
+	if localMatched {
+		return matchName, nil
+	}
+
+	// 2. search neighbors with budgets
+	budget := conf.Initial
+	for i := 0; i < int(conf.Retry); i++ {
+		match, err := n.searchFirstFromNei(reg, budget, conf.Timeout)
+		if err == nil {
+			n.Info().Msgf("find match=%s from nei, return", match)
+			return match, nil
+		}
+		if err != nil && errors.Is(err, ERRNOTFOUND) {
+			n.Info().Msgf("search first fail with budget=%d, retry=%d, try next", budget, i)
+			budget *= conf.Factor
+			continue
+		}
+		if err != nil {
+			// exceptional error
+			err = fmt.Errorf("SearchFirst error: %w", err)
+			n.Err(err).Send()
+			return "", err
+		}
+	}
+	// if we did not find, it is not an err
+	n.Info().Msgf("search first fail on all retries, return")
+	return "", nil
+
 }
 
 // Tag creates a mapping between a (file)name and a metahash.

@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"fmt"
 	"io"
 	"regexp"
 	"time"
@@ -96,4 +97,8 @@ type ExpandingRing struct {
 
 	// Timeout before retrying when no response received.
 	Timeout time.Duration
+}
+
+func (ring ExpandingRing) String() string {
+	return fmt.Sprintf("{Initial=%d, factor=%d, retry=%d, timeout=%v}", ring.Initial, ring.Factor, ring.Retry, ring.Timeout)
 }
