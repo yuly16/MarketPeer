@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -57,7 +58,7 @@ func GetBinnodeFac(binaryPath string) peer.Factory {
 
 		registry, ok := conf.MessageRegistry.(*rproxy.Registry)
 		if !ok {
-			panic("binnode must have a proxy socket")
+			panic("binnode must have a proxy registry")
 		}
 
 		return &binnode{
@@ -110,6 +111,15 @@ func (b *binnode) Start() error {
 		"--antientropy", b.conf.AntiEntropyInterval.String(),
 		"--heartbeat", b.conf.HeartbeatInterval.String(),
 		"--acktimeout", b.conf.AckTimeout.String(),
+		"--totalpeers", strconv.Itoa(int(b.conf.TotalPeers)),
+		"--paxosid", strconv.Itoa(int(b.conf.PaxosID)),
+		"--paxosproposerretry", b.conf.PaxosProposerRetry.String(),
+	}
+
+	// if this is a storage that uses the filesystem then we want to use it
+	fileStorage, ok := b.conf.Storage.(fileStorage)
+	if ok {
+		args = append(args, "--storagefolder", fileStorage.GetFolderPath())
 	}
 
 	cmd := exec.Command(b.binaryPath, args...)
@@ -294,4 +304,8 @@ func (b binnode) postData(endpoint string, v interface{}) ([]byte, error) {
 	}
 
 	return content, nil
+}
+
+type fileStorage interface {
+	GetFolderPath() string
 }

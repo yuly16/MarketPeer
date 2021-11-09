@@ -324,7 +324,7 @@ func (d datasharing) searchPost(w http.ResponseWriter, r *http.Request) {
 	name, err := d.node.SearchFirst(*regex, peer.ExpandingRing{
 		Initial: arguments.Initial,
 		Factor:  arguments.Factor,
-		Retry:   arguments.Retry,
+		Retry:   arguments.Factor,
 		Timeout: timeout,
 	})
 

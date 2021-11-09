@@ -61,7 +61,7 @@ func Test_HW1_Integration_Broadcast(t *testing.T) {
 		nodes[i] = node
 	}
 
-	for i := nReference; i < nReference+nStudent; i++ {
+	for i := nStudent; i < nReference+nStudent; i++ {
 		node := z.NewTestNode(t, studentFac, studentTransp, "127.0.0.1:0",
 			z.WithAntiEntropy(antiEntropy),
 			// since everyone is sending a rumor, there is no need to have route

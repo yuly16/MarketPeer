@@ -1,5 +1,9 @@
 package storage
 
+// LastBlockKey defines the key in the blockchain store that stores the last
+// blockchain block's hash.
+const LastBlockKey = "0000000000000000000000000000000000000000000000000000000000000000"
+
 // Storage describes the stores provided to the peer that must be used.
 type Storage interface {
 	// GetDataBlobStore returns a storage to store data blobs. The storage
@@ -9,6 +13,9 @@ type Storage interface {
 	// GetNamingStore returns a storage to store the names mapping. The
 	// storage must use tags/filenames as key, and metahashes as values.
 	GetNamingStore() Store
+
+	// GetBlockchainStore returns a storage to store the blockchain blocks.
+	GetBlockchainStore() Store
 }
 
 // Store describes the primitives of a simple storage.
