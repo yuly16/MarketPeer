@@ -58,6 +58,7 @@ func (n *node) heartbeatDaemon(interval time.Duration) {
 	}
 }
 
+// TODO: make it the method of messager
 func (n *node) listenDaemon() {
 	// 1. must check if the message is truly for the node
 	// 	1.1 if yes, use `msgRegistry` to execute the callback associated with the message

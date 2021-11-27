@@ -20,7 +20,7 @@ import (
 
 // Q: seqs update shall onReceived or onProcessed?
 // A: currently onReceived. Because received req is guaranteed to be processed eventually.
-func (n *node) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error {
+func (n *Messager) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error {
 	__logger := n.Logger.With().Str("func", "RumorsMsgCallback").Logger()
 	__logger.Info().Msg("enter rumors callback")
 
@@ -110,14 +110,14 @@ func (n *node) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error 
 		return fmt.Errorf("RumorsMsgCallback fail: %w", err)
 	}
 
-	// 3. possibly redirect the RumorsMessage to another node incase it is "new"
+	// 3. possibly redirect the RumorsMessage to another Messager incase it is "new"
 	// for those msgs that are ignored, are they not new. see https://moodle.epfl.ch/mod/forum/discuss.php?d=65056
 	if !isNew {
 		__logger.Info().Msg("nothing new from rumors, dont need to propagate, return")
 		return nil
 	}
 
-	// here we create a new packet and use this node as source, since this is a re-send rather than routing
+	// here we create a new packet and use this Messager as source, since this is a re-send rather than routing
 	// dont need to check neighbor, otherwise we cannot receive this message.
 	randNei := n.randNeighExcept(pkt.Header.RelayedBy)
 	if randNei == pkt.Header.RelayedBy {
@@ -135,7 +135,7 @@ func (n *node) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error 
 
 // assumption: only ListenDaemon invoke StatusMsgCallback. That is, it will not be called with Unicast/BroadCast, thus will never be embeded
 // so it is generally race-free
-func (n *node) StatusMsgCallback(msg types.Message, pkt transport.Packet) error {
+func (n *Messager) StatusMsgCallback(msg types.Message, pkt transport.Packet) error {
 	n.Debug().Msgf("enter status callback")
 	other := pkt.Header.Source
 	statusMsg := msg.(*types.StatusMessage)
@@ -223,7 +223,7 @@ func (n *node) StatusMsgCallback(msg types.Message, pkt transport.Packet) error 
 	if len(meExceptOther) == 0 && !otherExceptMe && rand.Float64() < n.conf.ContinueMongering {
 		// "ContinueMongering"
 		// send to a random nei other than other
-		// Note: dont need to check neight existence, since we receive a status from a connected node
+		// Note: dont need to check neight existence, since we receive a status from a connected Messager
 		nei := n.randNeighExcept(other)
 		if nei == other {
 			n.Warn().Str("callback", "statusMsg").Msg("only one neighbor, dont need to propagate the consistent status/view")
@@ -251,7 +251,7 @@ func (n *node) StatusMsgCallback(msg types.Message, pkt transport.Packet) error 
 //         pro: cleaner for Ack
 //         con: if a message is lost in the network, then no ack will be received, and we got a ghost entry
 // assumption: only ListenDaemon invoke AckMsgCallback. That is, it will not be called with Unicast/BroadCast, thus will never be embeded
-func (n *node) AckMsgCallback(msg types.Message, pkt transport.Packet) error {
+func (n *Messager) AckMsgCallback(msg types.Message, pkt transport.Packet) error {
 	n.Debug().Msg("start ack callback")
 	ack := msg.(*types.AckMessage)
 	n.acuMu.Lock()
@@ -286,7 +286,7 @@ func (n *node) AckMsgCallback(msg types.Message, pkt transport.Packet) error {
 	return nil
 }
 
-func (n *node) PrivateMsgCallback(msg types.Message, pkt transport.Packet) error {
+func (n *Messager) PrivateMsgCallback(msg types.Message, pkt transport.Packet) error {
 	private := msg.(*types.PrivateMessage)
 	if _, ok := private.Recipients[n.addr()]; !ok {
 		return nil
@@ -380,6 +380,7 @@ func (n *node) SearchReplyMessageCallback(msg types.Message, pkt transport.Packe
 	return nil
 }
 
+// TODO: make the datasharing module also independent, like messager
 func (n *node) SearchRequestMessageCallback(msg types.Message, pkt transport.Packet) error {
 	n.Debug().Msg("start search request callback")
 	req := msg.(*types.SearchRequestMessage)
