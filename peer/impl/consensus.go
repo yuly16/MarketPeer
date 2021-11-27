@@ -88,11 +88,6 @@ type MultiPaxos struct {
 }
 
 func (mp *MultiPaxos) Propose(value types.PaxosValue) error {
-	// ret := make(chan struct{}) // TODO: shall we make it buffered?
-	// go func() {
-	// 	mp.propose(value)
-	// 	ret <- struct{}{}
-	// }()
 	return mp.propose(value)
 }
 
@@ -115,7 +110,7 @@ func (mp *MultiPaxos) propose(value types.PaxosValue) error {
 		prepare_ := types.PaxosPrepareMessage{
 			Step:   0, // TODO
 			ID:     mp.paxosID,
-			Source: mp.addr, // TODO: abstraction leak
+			Source: mp.addr,
 		}
 		mp.mu.Unlock()
 
@@ -140,7 +135,8 @@ func (mp *MultiPaxos) propose(value types.PaxosValue) error {
 					// to follow this consensus. If there is accepted value, it is
 					// guaranteed to exist in any majority set, so it is guranteed to
 					// be found by us. Then we just do an "echo"
-					// TODO: when do we set our accepeted value and accepted term? broadcast?
+					// Q: when do we set our accepeted value and accepted term? broadcast?
+					// A: when we propose, we will update our accepted value
 					highestAccpetID = promise.AcceptedID
 					proposedValue = *promise.AcceptedValue
 				}
@@ -352,19 +348,18 @@ func (mp *MultiPaxos) PaxosProposeCallback(msg types.Message, pkt transport.Pack
 }
 
 func (mp *MultiPaxos) PaxosPromiseCallback(msg types.Message, pkt transport.Packet) error {
-	// TODO: promise callback do nothing? what about accept value?
 	__logger := mp.Logger.With().Str("func", "PaxosPromiseCallback").Logger()
 	promise := msg.(*types.PaxosPromiseMessage)
 	__logger.Info().Msgf("enter PaxosPromiseCallback, msg=%s", promise.String())
 	mp.mu.Lock()
-	// TODO: add note, the returned error is intended for the sender routine to do state check before broadcast
+	// Note: the returned error is intended for the sender routine to do state check before broadcast
 	//       for receiver, dont bother printing these redundant msgs
 	if promise.Step != mp.step {
 		__logger.Info().Msgf("tlc.step=%s != msg.step=%s, return", mp.step, promise.Step)
 		mp.mu.Unlock()
 		return fmt.Errorf("state has changed. tlc.step=%d != msg.step=%d", mp.step, promise.Step)
 	}
-	phase := atomic.LoadInt32(&mp.phase) // TODO: phase 这里用 atomic 而没有在 lock 里面有风险
+	phase := atomic.LoadInt32(&mp.phase)
 	if phase == NOTPROPOSE {
 		// we are just acceptor, so dont need to process this message anyway
 		__logger.Info().Msgf("acceptor promise callback, do nothing, return nil")
@@ -397,7 +392,7 @@ func (mp *MultiPaxos) PaxosAcceptCallback(msg types.Message, pkt transport.Packe
 	}
 	// TODO: do we really need to use an atomic value, or even lock?
 	phase := atomic.LoadInt32(&mp.phase)
-	// TODO: Q: what if a peer is accepting as well trying to propose
+	// Q: what if a peer is accepting as well trying to propose
 	// A:  1. if we first enter the phase2, then receive the accept, then we should process it
 	//     2. if accept before phase2, then it has to be accept regarding to propose broadcasted by others
 	//        so, we still do nothing about it
