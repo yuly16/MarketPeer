@@ -294,9 +294,9 @@ func (n *Messager) addNeighbor(addr ...string) {
 	defer n.mu.Unlock()
 	// we could directly reach the peers
 	// NOTE: adding ourselves should have no effects
-	n.Trace().Strs("peers", addr).Msg("adding peers")
+	n.Trace().Strs("peers", addr).Msg("adding neis")
 	for i := 0; i < len(addr); i++ {
-		if _, ok := n.neighborSet[addr[i]]; !ok {
+		if _, ok := n.neighborSet[addr[i]]; !ok && addr[i] != n.addr() {
 			n.neighborSet[addr[i]] = struct{}{}
 			n.neighbors = append(n.neighbors, addr[i])
 		}
