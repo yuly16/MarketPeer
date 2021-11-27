@@ -1,10 +1,12 @@
 package peer
 
 import (
+	"fmt"
+	"time"
+
 	"go.dedis.ch/cs438/registry"
 	"go.dedis.ch/cs438/storage"
 	"go.dedis.ch/cs438/transport"
-	"time"
 )
 
 // Peer defines the interface of a peer in the Peerster system. It embeds all
@@ -79,6 +81,10 @@ type Configuration struct {
 	// retries to send a prepare when it doesn't get enough promises or accepts.
 	// Default: 5s.
 	PaxosProposerRetry time.Duration
+}
+
+func (conf *Configuration) String() string {
+	return fmt.Sprintf("AckTimeout=%v", conf.AckTimeout)
 }
 
 // Backoff describes parameters for a backoff algorithm. The initial time must

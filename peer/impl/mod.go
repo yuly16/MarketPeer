@@ -27,7 +27,7 @@ import (
 var _logger zerolog.Logger = zerolog.New(
 	zerolog.NewConsoleWriter(
 		func(w *zerolog.ConsoleWriter) { w.Out = os.Stderr },
-		func(w *zerolog.ConsoleWriter) { w.TimeFormat = "15:04:05.000" })).Level(zerolog.InfoLevel).
+		func(w *zerolog.ConsoleWriter) { w.TimeFormat = "15:04:05.000" })).Level(zerolog.ErrorLevel).
 	With().Timestamp().Logger()
 var _peerCount int32 = -1
 var NONEIGHBOR string = "NONEIGHBOR"
@@ -73,6 +73,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 
 	node.Logger = _logger.With().Str("Peer", fmt.Sprintf("%d %s", node.id, node.sock.GetAddress())).Logger()
 	_logger.Info().Int32("id", node.id).Str("addr", node.sock.GetAddress()).Msg("create new peer")
+	_logger.Debug().Msgf("conf=%s", conf.String())
 	return node
 }
 

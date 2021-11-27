@@ -93,7 +93,6 @@ func (mp *MultiPaxos) Propose(value types.PaxosValue) error {
 	// 	mp.propose(value)
 	// 	ret <- struct{}{}
 	// }()
-
 	return mp.propose(value)
 }
 
@@ -120,7 +119,7 @@ func (mp *MultiPaxos) propose(value types.PaxosValue) error {
 		}
 		mp.mu.Unlock()
 
-		mp.Info().Msgf("assemble a new prepare msg %s", prepare_)
+		mp.Info().Msgf("assemble a new prepare msg %s, will broadcast it", prepare_)
 		prepare, err := mp.msgRegistry.MarshalMessage(&prepare_)
 		if err != nil {
 			return err
@@ -129,6 +128,7 @@ func (mp *MultiPaxos) propose(value types.PaxosValue) error {
 		if err != nil {
 			return err
 		}
+		mp.Info().Msgf("broadcasted prepare msg %s, will broadcast it", prepare_)
 
 		// wait for the of threshold of peers
 		timer := time.After(mp.conf.PaxosProposerRetry)
@@ -182,10 +182,13 @@ func (mp *MultiPaxos) propose(value types.PaxosValue) error {
 	if err != nil {
 		return err
 	}
+	mp.Info().Msgf("assemble a new propose msg %s, and will broadcast it", propose_)
+
 	err = mp.Messaging.Broadcast(propose)
 	if err != nil {
 		return err
 	}
+	mp.Info().Msgf("propose msg %s broadcasted", propose_)
 
 	// wait for the of threshold of peers
 	timer := make(chan struct{}) // could signal all
@@ -270,20 +273,29 @@ func (mp *MultiPaxos) PaxosPrepareCallback(msg types.Message, pkt transport.Pack
 		AcceptedID:    mp.acceptedID,
 		AcceptedValue: mp.acceptedValue,
 	}
+	mp.mu.Unlock()
+
 	promise, err := mp.msgRegistry.MarshalMessage(&promise_)
 	if err != nil {
 		__logger.Err(err).Send()
-		mp.mu.Unlock()
 		return err
 	}
 
+	// it is evoked by Broadcast self process packet, we dont need to send a private msg
+	// here, just directly send on promiseCh
+	if prepare.Source == mp.addr {
+		mp.Messaging.Unicast(mp.addr, promise)
+		return nil
+	}
+
+	// now it is truly acceptor receiving the prepare messages, we then need to
+	// assemble a Private msg and send it back
 	private_ := types.PrivateMessage{
 		Recipients: map[string]struct{}{prepare.Source: {}},
 		Msg:        &promise,
 	}
 	private, err := mp.msgRegistry.MarshalMessage(&private_)
 
-	mp.mu.Unlock()
 	if err != nil {
 		__logger.Err(err).Send()
 		return err
@@ -334,6 +346,8 @@ func (mp *MultiPaxos) PaxosProposeCallback(msg types.Message, pkt transport.Pack
 		__logger.Err(err).Send()
 		return err
 	}
+	__logger.Info().Msgf("accept=%s broadcasted", accept)
+
 	return nil
 }
 
@@ -365,6 +379,8 @@ func (mp *MultiPaxos) PaxosPromiseCallback(msg types.Message, pkt transport.Pack
 	}
 	// now we are in the proposer.phase1
 	mp.promiseCh <- promise // send the promise
+	__logger.Info().Msgf("send the promise the promiseCh, promise=%s", *promise)
+
 	mp.mu.Unlock()
 	return nil
 }
@@ -403,6 +419,8 @@ func (mp *MultiPaxos) PaxosAcceptCallback(msg types.Message, pkt transport.Packe
 	// now we are in phase2 and same step
 	// we then could send the accept
 	mp.acceptCh <- accept
+	__logger.Info().Msgf("send accept=%s to acceptCh", *accept)
+
 	mp.mu.Unlock()
 	return nil
 }
