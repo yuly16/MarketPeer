@@ -2,6 +2,7 @@ package impl
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"sync"
 	"time"
@@ -156,11 +157,16 @@ func (n *Messager) Broadcast(msg transport.Message) error {
 
 			// start to wait for the ack message
 			n.Debug().Msgf("start to wait for broadcast ack message on packet %s", pkt.Header.PacketID)
+			timeout := n.conf.AckTimeout
+			if timeout == 0 {
+				timeout = time.Duration(math.MaxInt32 * time.Millisecond)
+			}
+			timer := time.After(timeout)
 			select {
 			case <-future:
 				acked = true
 				n.Debug().Msgf("ack received and properly processed")
-			case <-time.After(n.conf.AckTimeout):
+			case <-timer:
 				n.Debug().Msgf("ack timeout, start another probe")
 				// send to another random neighbor
 			}
