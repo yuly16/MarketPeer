@@ -64,7 +64,8 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	// node.neighbors = make([]string, 0)
 	// node.neighborSet = make(map[string]struct{})
 	node.Messager = NewMessager(conf)
-	node.consensus = NewConsensus(node.Messager, conf)
+	node.consensusCallback = make(chan *types.PaxosValue, 10) // TODO: is this enough with 10?
+	node.consensus = NewConsensus(node.Messager, node.consensusCallback, conf)
 	// node.Messaging = NewMessager(conf)
 
 	if node.conf.AckTimeout == 0 {
@@ -86,7 +87,9 @@ type node struct {
 	// You probably want to keep the peer.Configuration on this struct:
 	msgRegistry registry.Registry
 	conf        peer.Configuration
-	consensus   Consensus
+
+	consensus         Consensus
+	consensusCallback chan *types.PaxosValue
 
 	// storage
 	blob   storage.Store
@@ -151,6 +154,7 @@ func (n *node) Start() error {
 	go n.listenDaemon()
 	go n.statusReportDaemon(n.conf.AntiEntropyInterval)
 	go n.heartbeatDaemon(n.conf.HeartbeatInterval)
+	go n.applyDaemon()
 	n.Info().Msg("daemons loaded")
 	n.Info().Msg("Start done")
 	return nil
@@ -161,6 +165,7 @@ func (n *node) Stop() error {
 	// panic("to be implemented in HW0")
 	n.Info().Msg("Stoping...")
 	atomic.StoreInt32(&n.stat, KILL)
+	n.consensus.Stop()
 	return nil
 }
 
@@ -459,12 +464,24 @@ func (n *node) SearchFirst(reg regexp.Regexp, conf peer.ExpandingRing) (name str
 // Tag creates a mapping between a (file)name and a metahash.
 //
 func (n *node) Tag(name string, mh string) error {
+	if n.conf.TotalPeers <= 1 {
+		n.naming.Set(name, []byte(mh))
+		return nil
+	}
+	if n.naming.Get(name) != nil {
+		return fmt.Errorf("filename=%s already exists in naming store", name)
+	}
 	value := types.PaxosValue{UniqID: xid.New().String(), Filename: name, Metahash: mh}
 	if err := n.consensus.Propose(value); err != nil {
 		err = fmt.Errorf("Tag error: %w", err)
 		n.Err(err).Send()
 		return err
 	} else {
+		// TODO: propose 什么时候返回的问题? naming store 的更新只有在 TLC 收集后才更新?
+		// 普通 acceptor naming store 什么时候会被触发?
+		if n.naming.Get(name) != nil {
+			return fmt.Errorf("filename=%s already exists in naming store", name)
+		}
 		n.naming.Set(name, []byte(mh))
 	}
 	return nil

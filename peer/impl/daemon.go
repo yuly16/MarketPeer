@@ -90,7 +90,10 @@ func (n *node) listenDaemon() {
 		if pack.Header.Destination == n.sock.GetAddress() {
 			n.Trace().Str("addr", pack.Header.Destination).Msg("addr matched between peer and sender")
 			if err := n.msgRegistry.ProcessPacket(pack); err != nil {
-				n.Error().Err(err).Msg("error while processing the packet")
+				var sendErr *SenderCallbackError
+				if !errors.As(err, &sendErr) { // we only care about non-sender error
+					n.Error().Err(err).Msg("error while processing the packet")
+				}
 			}
 
 		} else {
@@ -99,5 +102,15 @@ func (n *node) listenDaemon() {
 			nextDest, err := n.send(pack)
 			n.Err(err).Str("dest", pack.Header.Destination).Str("nextDest", nextDest).Str("msg", pack.Msg.String()).Str("pkt", pack.String()).Msg("relay packet")
 		}
+	}
+}
+
+func (n *node) applyDaemon() {
+
+	for !n.isKilled() {
+		value := <-n.consensusCallback
+		// apply the value
+		n.naming.Set(value.Filename, []byte(value.Metahash))
+		n.Info().Msgf("consensus daemon: receive new consensus filename=%s, metahash=%s", value.Filename, value.Metahash)
 	}
 }
