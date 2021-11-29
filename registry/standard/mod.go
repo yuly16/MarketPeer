@@ -80,7 +80,7 @@ func (r *Registry) ProcessPacket(pkt transport.Packet) error {
 
 	res := <-wait
 	if res != nil {
-		return xerrors.Errorf("failed to call handler: %v", res)
+		return xerrors.Errorf("failed to call handler: %w", res)
 	}
 
 	// call the registered notification handlers, with a timeout

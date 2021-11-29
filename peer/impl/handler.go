@@ -74,12 +74,12 @@ func (n *Messager) RumorsMsgCallback(msg types.Message, pkt transport.Packet) er
 
 		// now process the embed msg, call the callback
 		// wrap a packet
-		pkt := transport.Packet{
+		pkt_ := transport.Packet{
 			Header: pkt.Header,
 			Msg:    rumor.Msg,
 		}
 		__logger.Info().Msg("now processing embed message")
-		if err := n.msgRegistry.ProcessPacket(pkt); err != nil {
+		if err := n.msgRegistry.ProcessPacket(pkt_); err != nil {
 			__logger.Err(err).Send()
 			continue
 			// return fmt.Errorf("RumorsMsgCallback fail: processing rumor's embed msg fail: %w", err)

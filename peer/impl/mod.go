@@ -65,7 +65,10 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	// node.neighborSet = make(map[string]struct{})
 	node.Messager = NewMessager(conf)
 	node.consensusCallback = make(chan *types.PaxosValue, 10) // TODO: is this enough with 10?
-	node.consensus = NewConsensus(node.Messager, node.consensusCallback, conf)
+	node.consensus = NewConsensus(func(pv types.PaxosValue) error {
+		node.naming.Set(pv.Filename, []byte(pv.Metahash))
+		return nil
+	}, node.Messager, node.consensusCallback, conf)
 	// node.Messaging = NewMessager(conf)
 
 	if node.conf.AckTimeout == 0 {
@@ -464,27 +467,41 @@ func (n *node) SearchFirst(reg regexp.Regexp, conf peer.ExpandingRing) (name str
 // Tag creates a mapping between a (file)name and a metahash.
 //
 func (n *node) Tag(name string, mh string) error {
+	__logger := n.Logger.With().Str("func", "Tag").Logger()
+
 	if n.conf.TotalPeers <= 1 {
 		n.naming.Set(name, []byte(mh))
 		return nil
 	}
-	if n.naming.Get(name) != nil {
-		return fmt.Errorf("filename=%s already exists in naming store", name)
-	}
+	__logger.Info().Msgf("try to tag on name=%s, mh=%s", name, mh)
 	value := types.PaxosValue{UniqID: xid.New().String(), Filename: name, Metahash: mh}
-	if err := n.consensus.Propose(value); err != nil {
-		err = fmt.Errorf("Tag error: %w", err)
-		n.Err(err).Send()
-		return err
-	} else {
-		// TODO: propose 什么时候返回的问题? naming store 的更新只有在 TLC 收集后才更新?
-		// 普通 acceptor naming store 什么时候会被触发?
+
+	for {
 		if n.naming.Get(name) != nil {
 			return fmt.Errorf("filename=%s already exists in naming store", name)
 		}
-		n.naming.Set(name, []byte(mh))
+		__logger.Info().Msgf("name=%s not in namestore yet", name)
+
+		__logger.Info().Msgf("try to tag and propose on value=%v", value)
+		finish, err := n.consensus.Propose(value)
+		if errors.Is(err, OnProposing) {
+			__logger.Info().Msgf("it is onProposing, we need to wait for finish")
+			<-finish // wait to be done
+			__logger.Info().Msgf("finished, could start another check")
+
+		} else {
+			__logger.Info().Msgf("we are now proposing")
+			consensuValue := <-finish
+			__logger.Info().Msgf("reach consensus on value=%v, while our tag vakue=%v", consensuValue, value)
+			if value.UniqID == consensuValue.UniqID {
+				__logger.Info().Msgf("consensusValue=ourValue, return well", consensuValue, value)
+				return nil
+			}
+			__logger.Info().Msgf("consensusValue!=ourValue, start another check", consensuValue, value)
+
+		}
+
 	}
-	return nil
 }
 
 // Resolve returns the corresponding metahash of a given (file)name. Returns

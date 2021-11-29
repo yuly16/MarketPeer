@@ -3,6 +3,7 @@ package impl
 import (
 	"encoding/hex"
 	"fmt"
+	"math"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -16,9 +17,11 @@ import (
 	"go.dedis.ch/cs438/types"
 )
 
+type OnConsensusReach func(types.PaxosValue) error
+
 type Consensus interface {
 	// from the perspective of consensus layer, the value could be everything
-	Propose(value types.PaxosValue) error
+	Propose(value types.PaxosValue) (<-chan types.PaxosValue, error)
 	Stop() error
 }
 
@@ -26,7 +29,7 @@ type Clock interface {
 	StepAndMaxID() (uint, uint)
 }
 
-func NewConsensus(messager peer.Messaging, callback chan *types.PaxosValue, conf peer.Configuration) Consensus {
+func NewConsensus(on OnConsensusReach, messager peer.Messaging, callback chan *types.PaxosValue, conf peer.Configuration) Consensus {
 	mpaxos := &MultiPaxos{Messaging: messager}
 	mpaxos.Logger = _logger.With().Str("Paxos", fmt.Sprintf("%d %s", conf.PaxosID, conf.Socket.GetAddress())).Logger()
 	mpaxos.msgRegistry = conf.MessageRegistry
@@ -43,11 +46,17 @@ func NewConsensus(messager peer.Messaging, callback chan *types.PaxosValue, conf
 	mpaxos.blockchain = conf.Storage.GetBlockchainStore()
 	mpaxos.learnerAdvance = make(chan struct{}) // synchronization, no buffer
 	mpaxos.learnerSignalPropose = make(map[uint]chan types.PaxosValue)
+	mpaxos.stepFinish = make(map[uint]chan types.PaxosValue) // it might also be step-indexed
+	mpaxos.stepTLCMsgs = make(map[uint][]*types.TLCMessage)
 	mpaxos.learnerSignalPropose[0] = make(chan types.PaxosValue, 1)
+	mpaxos.stepFinish[0] = make(chan types.PaxosValue, 1) // synchronization, no buffer
 	mpaxos.msgRegistry.RegisterMessageCallback(types.PaxosPrepareMessage{}, mpaxos.PaxosPrepareCallback)
 	mpaxos.msgRegistry.RegisterMessageCallback(types.PaxosProposeMessage{}, mpaxos.PaxosProposeCallback)
 	mpaxos.msgRegistry.RegisterMessageCallback(types.PaxosAcceptMessage{}, mpaxos.PaxosAcceptCallback)
 	mpaxos.msgRegistry.RegisterMessageCallback(types.PaxosPromiseMessage{}, mpaxos.PaxosPromiseCallback)
+	mpaxos.msgRegistry.RegisterMessageCallback(types.TLCMessage{}, mpaxos.TLCCallback)
+
+	mpaxos.onConsensusReach = on
 	go mpaxos.tlcDaemon()
 	go mpaxos.learnerRoutine(0, mpaxos.learnerSignalPropose[0])
 	return mpaxos
@@ -102,6 +111,8 @@ type MultiPaxos struct {
 	tlcSent              bool // whether tlc is already sent in current step
 	learnerAdvance       chan struct{}
 	learnerSignalPropose map[uint]chan types.PaxosValue
+	stepFinish           map[uint]chan types.PaxosValue
+	onConsensusReach     OnConsensusReach
 
 	proposalMaxID uint // perspective of acceptor
 
@@ -120,6 +131,7 @@ func (mp *MultiPaxos) Stop() error {
 // FIXME: can we abstract a TLC layer?
 // assumption: step = tlc.Step
 func (mp *MultiPaxos) onTLCReachedAtCurrentStep(tlc *types.TLCMessage, catchingup bool, __logger zerolog.Logger) error {
+	__logger.Info().Msgf("onTLCReachedAtCurrentStep: catchingup=%v, tlc=%s", catchingup, *tlc)
 	// reach consensus at current step!
 	mp.mu.Lock()
 	if mp.step != tlc.Step {
@@ -128,6 +140,7 @@ func (mp *MultiPaxos) onTLCReachedAtCurrentStep(tlc *types.TLCMessage, catchingu
 
 		return nil
 	}
+	mp.mu.Unlock()
 	__logger.Info().Msgf("collect enough tlc message step=%d, value=%v, catchingup=%v", tlc.Step, tlc.Block.Value, catchingup)
 	// 1. add the block to block chain
 	mp.mu.Lock()
@@ -145,10 +158,11 @@ func (mp *MultiPaxos) onTLCReachedAtCurrentStep(tlc *types.TLCMessage, catchingu
 		return err
 	}
 	mp.blockchain.Set(hexhash, blockBytes)
-	mp.blockchain.Set(storage.LastBlockKey, block.PrevHash)
+	mp.blockchain.Set(storage.LastBlockKey, block.Hash)
 
 	// 2. set the namestore
-	mp.applyCallback <- &tlc.Block.Value // TODO: might cause deadlock, pay attention
+	// mp.applyCallback <- &tlc.Block.Value // TODO: might cause deadlock, pay attention
+	mp.onConsensusReach(tlc.Block.Value)
 	// 3. broadcast if
 	//    (1) we haven't broadcast for current step
 	//    (2) not catching up
@@ -175,7 +189,7 @@ func (mp *MultiPaxos) onTLCReachedAtCurrentStep(tlc *types.TLCMessage, catchingu
 	// 4. advance step 这里一定要注意, 涉及到状态改变的临界区域了
 	mp.mu.Lock()
 	if mp.step == tlc.Step {
-		mp.advanceClockAsStep(tlc.Step)
+		mp.advanceClockAsStep(tlc.Step, tlc.Block.Value)
 	} else {
 		__logger.Info().Msgf("state changed, tlcmsg.step=%d != mystep=%d", tlc.Step, mp.step)
 		mp.mu.Unlock()
@@ -195,31 +209,36 @@ func (mp *MultiPaxos) isKilled() bool {
 	return atomic.LoadInt32(&mp.livestat) == KILL
 }
 
+// TODO: actually this daemon dont need to check the step, since only this could modify the step
 func (mp *MultiPaxos) tlcDaemon() {
 	__logger := mp.Logger.With().Str("daemon", "tlcDaemon").Logger()
-
+	__logger.Info().Msg("start")
 	// collect the tlc messages and advance the step accordingly
 	for !mp.isKilled() {
 		// event-based, check for current-step consensus
+
 		tlc := <-mp.tlcCh
+		__logger.Info().Msgf("receive tlc=%s", tlc)
 
 		mp.mu.Lock()
 		if tlc.Step < mp.step {
 			// ignore outdated tlc
+			__logger.Info().Msgf("tlc.step=%d < mp.step=%d, continue", tlc.Step, mp.step)
+
 			mp.mu.Unlock()
 			continue
 		}
 		mp.mu.Unlock()
-
 		msgs, ok := mp.stepTLCMsgs[tlc.Step]
 		if !ok {
 			mp.stepTLCMsgs[tlc.Step] = []*types.TLCMessage{tlc}
-			continue
+			msgs = mp.stepTLCMsgs[tlc.Step]
+		} else {
+			// update stepTLCMsgs
+			msgs = append(msgs, tlc)
+			mp.stepTLCMsgs[tlc.Step] = msgs
 		}
 
-		// update stepTLCMsgs
-		msgs = append(msgs, tlc)
-		mp.stepTLCMsgs[tlc.Step] = msgs
 		if len(msgs) < mp.conf.PaxosThreshold(mp.conf.TotalPeers) {
 			continue
 		}
@@ -238,9 +257,13 @@ func (mp *MultiPaxos) tlcDaemon() {
 }
 
 func (mp *MultiPaxos) onConsensusReachAtStep(step uint, paxosValue types.PaxosValue) error {
+	__logger := mp.Logger.With().Str("routine", "learner").Uint("step", step).Logger()
 
 	// construct the block for blockchain
 	prevHash := mp.blockchain.Get(storage.LastBlockKey)
+	if prevHash == nil {
+		prevHash = make([]byte, 32)
+	}
 	beforeHash := []byte(strconv.Itoa(int(step)) + paxosValue.UniqID + paxosValue.Filename + paxosValue.Metahash + string(prevHash))
 	hashkey, err := sha256(beforeHash)
 	if err != nil {
@@ -252,6 +275,8 @@ func (mp *MultiPaxos) onConsensusReachAtStep(step uint, paxosValue types.PaxosVa
 		PrevHash: prevHash,
 		Hash:     hashkey,
 	}
+
+	__logger.Info().Msgf("assemble a new block {block n°%d H(%x) - %v - %x", block.Index, block.Hash[:int(math.Min(4, float64(len(block.Hash))))], block.Value, block.PrevHash[:int(math.Min(4, float64(len(block.PrevHash))))])
 	// assemble a new TLC message
 	tlc_ := types.TLCMessage{
 		Step:  step,
@@ -266,10 +291,14 @@ func (mp *MultiPaxos) onConsensusReachAtStep(step uint, paxosValue types.PaxosVa
 	// (we are waiting for lock, advanceCLock waiting for learnerAdvance)
 	// otherwise, we check it in the TLCCallback, which will be called in broadcast
 	// so here, we directly broadcast and inform the proposer
+	__logger.Info().Msgf("assemble a tlc: %s, will broadcast it", tlc_.String())
+
 	err = mp.Messaging.Broadcast(tlc)
 	if err != nil {
 		return err
 	}
+	__logger.Info().Msgf("broadcasted tlc: %s", tlc_.String())
+
 	return nil
 }
 
@@ -280,8 +309,8 @@ func (mp *MultiPaxos) onConsensusReachAtStep(step uint, paxosValue types.PaxosVa
 // if we restart another learnerRoutine, then what if the old one receive a message on the acceptCh?
 // 所以我们要保证 step 一旦更新, 上一个 learnerRoutine 必须立即停止
 func (mp *MultiPaxos) learnerRoutine(step uint, signalPropose chan<- types.PaxosValue) {
-	__logger := mp.Logger.With().Str("routine", "learner").Logger()
-
+	__logger := mp.Logger.With().Str("routine", "learner").Uint("step", step).Logger()
+	__logger.Info().Msg("start")
 	// Q: why groupby the uniqID of PaxosValue, rather than accept.ID?
 	// A: to increase liveness, since in Paxos larger ID will propose same value, they dont need
 	//    to contend with each other.
@@ -290,6 +319,7 @@ func (mp *MultiPaxos) learnerRoutine(step uint, signalPropose chan<- types.Paxos
 	for {
 		select {
 		case accept := <-mp.acceptCh:
+			__logger.Info().Msgf("learner receives accept=%s", accept)
 			if accept.Step != step {
 				panic(fmt.Sprintf("accept.Step=%d != learner.step=%d", accept.Step, step)) // Note: it is a sanity check
 			}
@@ -315,8 +345,11 @@ func (mp *MultiPaxos) learnerRoutine(step uint, signalPropose chan<- types.Paxos
 				// step changed; learner not know yet, sends signal; propose receive signal; does not matter, signal is still stale
 				// step changed, learner new routine, sends signal; propose old not yet exit(timer is very long) -> problem!
 				// solution: (1) step-indexed signaling (2) if step changed, then old propose should exit instantly?
+				__logger.Info().Msgf("consensus reach at value=%s", paxosValue)
 				if atomic.LoadInt32(&mp.phase) == PHASETWO {
+
 					signalPropose <- paxosValue
+					__logger.Info().Msgf("notify propose that we have reached consensus", paxosValue)
 				}
 				err := mp.onConsensusReachAtStep(step, paxosValue)
 				__logger.Err(err).Send()
@@ -332,12 +365,32 @@ func (mp *MultiPaxos) learnerRoutine(step uint, signalPropose chan<- types.Paxos
 
 }
 
-func (mp *MultiPaxos) Propose(value types.PaxosValue) error {
+// TODO: stepFinish need to synchronized between Tag and us, is this right?
+func (mp *MultiPaxos) Propose(value types.PaxosValue) (<-chan types.PaxosValue, error) {
+	mp.Info().Msgf("try to propose %v", value)
+	var err error = nil
 	mp.mu.Lock()
+	phase := atomic.LoadInt32(&mp.phase)
 	step := mp.step
-	mp.mu.Unlock()
-	// are we proposing at this step?
-	return mp.propose(value, step)
+	defer func() {
+		mp.mu.Unlock()
+		if err == nil { // could propose
+			mp.propose(value, step)
+		}
+	}()
+
+	if phase == NOTPROPOSE {
+		mp.transitPhaseAsStep(step, PHASEONE)
+		mp.Info().Msgf("could propose at step=%d, transit to phase1", step)
+
+	} else {
+		mp.Info().Msgf("we are proposing at step=%d, return err=OnProposing", step)
+
+		err = OnProposing
+	}
+
+	// TODO: finish mp.stepFinish semantics
+	return mp.stepFinish[step], err
 }
 
 // not thread-safe, rely on callers
@@ -349,12 +402,15 @@ func (mp *MultiPaxos) transitPhaseAsStep(step uint, newPhase int32) {
 }
 
 // Note: rely on caller to make it thread-safe
-func (mp *MultiPaxos) advanceClockAsStep(step uint) {
+func (mp *MultiPaxos) advanceClockAsStep(step uint, paxosValue types.PaxosValue) {
 	if step != mp.step {
 		return
 	}
 	mp.step += 1
 	mp.proposalID = mp.paxosID_ // reinit
+	mp.proposalMaxID = 0
+	mp.acceptedValue = nil
+	mp.acceptedID = 0
 	mp.tlcSent = false
 	mp.learnerAdvance <- struct{}{} // make sure last learner routine exits, then we do our learnerRoutine
 	mp.acceptCh = make(chan *types.PaxosAcceptMessage, mp.conf.TotalPeers)
@@ -363,6 +419,11 @@ func (mp *MultiPaxos) advanceClockAsStep(step uint) {
 	delete(mp.learnerSignalPropose, mp.step-1)
 	delete(mp.stepTLCMsgs, mp.step-1) // delete old step
 	go mp.learnerRoutine(mp.step, mp.learnerSignalPropose[mp.step])
+	mp.stepFinish[mp.step] = make(chan types.PaxosValue, 1)
+	mp.stepFinish[mp.step-1] <- paxosValue // this would make sure the signal is sent,
+	// TODO: fuck the test, they did not call the Tag, so I cant directly test this synchrnization...
+	// delete(mp.stepFinish, mp.step-1)       // delete old step
+
 	mp.Info().Msgf("advance step to %d, init proposalID to %d", mp.step, mp.proposalID)
 }
 
@@ -422,6 +483,7 @@ func (mp *MultiPaxos) propose(value types.PaxosValue, step uint) error {
 
 		// wait for the of threshold of peers
 		timer := time.After(mp.conf.PaxosProposerRetry)
+		promised := true
 		for i := 0; i < mp.conf.PaxosThreshold(mp.conf.TotalPeers); i++ {
 			select {
 			case promise := <-mp.promiseCh:
@@ -446,9 +508,13 @@ func (mp *MultiPaxos) propose(value types.PaxosValue, step uint) error {
 				mp.proposalID += mp.conf.TotalPeers
 				__logger.Info().Msgf("phase 1 timeout, increment proposalID to %d", mp.proposalID)
 				mp.mu.Unlock()
-				continue
+				promised = false
+
 			}
 
+		}
+		if !promised {
+			continue
 		}
 		__logger.Info().Msgf("receive %d promise messages", mp.conf.PaxosThreshold(mp.conf.TotalPeers))
 
@@ -537,13 +603,15 @@ func (mp *MultiPaxos) PaxosPrepareCallback(msg types.Message, pkt transport.Pack
 	mp.mu.Lock()
 	if prepare.Step != mp.step {
 		__logger.Info().Msgf("tlc.step=%d != msg.step=%d, return", mp.step, prepare.Step)
+		err := fmt.Errorf("state has changed: tlc.step=%d != msg.step=%d", mp.step, prepare.Step)
 		mp.mu.Unlock()
-		return fmt.Errorf("state has changed: tlc.step=%d != msg.step=%d", mp.step, prepare.Step)
+		return err
 	}
 	if prepare.ID <= mp.proposalMaxID {
-		__logger.Info().Msgf("tlc.maxID=%s <= msg.id=%s, return", mp.proposalMaxID, prepare.ID)
+		__logger.Info().Msgf("tlc.maxID=%s >= msg.id=%s, return", mp.proposalMaxID, prepare.ID)
+		err := fmt.Errorf("state has changed: tlc.maxID=%d >= msg.id=%d", mp.proposalMaxID, prepare.ID)
 		mp.mu.Unlock()
-		return fmt.Errorf("state has changed: tlc.maxID=%d <= msg.id=%d", mp.proposalMaxID, prepare.ID)
+		return err
 
 	}
 
@@ -567,10 +635,10 @@ func (mp *MultiPaxos) PaxosPrepareCallback(msg types.Message, pkt transport.Pack
 
 	// it is evoked by Broadcast self process packet, we dont need to send a private msg
 	// here, just directly send on promiseCh
-	if prepare.Source == mp.addr {
-		mp.Messaging.Unicast(mp.addr, promise)
-		return nil
-	}
+	// if prepare.Source == mp.addr {
+	// 	mp.Messaging.Unicast(mp.addr, promise)
+	// 	return nil
+	// }
 
 	// now it is truly acceptor receiving the prepare messages, we then need to
 	// assemble a Private msg and send it back
@@ -587,6 +655,8 @@ func (mp *MultiPaxos) PaxosPrepareCallback(msg types.Message, pkt transport.Pack
 
 	__logger.Info().Msgf("will broadcast private=%s", private)
 	err = mp.Messaging.Broadcast(private)
+	__logger.Info().Msgf("broadcasted private=%s", private)
+
 	if err != nil {
 		__logger.Err(err).Send()
 		return err
@@ -602,13 +672,15 @@ func (mp *MultiPaxos) PaxosProposeCallback(msg types.Message, pkt transport.Pack
 	mp.mu.Lock()
 	if propose.Step != mp.step {
 		__logger.Info().Msgf("tlc.step=%s != msg.step=%s, return", mp.step, propose.Step)
+		err := fmt.Errorf("state has changed! tlc.step=%d != msg.step=%d", mp.step, propose.Step)
 		mp.mu.Unlock()
-		return fmt.Errorf("state has changed! tlc.step=%d != msg.step=%d", mp.step, propose.Step)
+		return err
 	}
 	if propose.ID != mp.proposalMaxID {
 		__logger.Info().Msgf("tlc.maxID=%s != msg.id=%s, return", mp.proposalMaxID, propose.ID)
+		err := fmt.Errorf("state has changed! tlc.maxID=%d != msg.id=%d", mp.proposalMaxID, propose.ID)
 		mp.mu.Unlock()
-		return fmt.Errorf("state has changed! tlc.maxID=%d != msg.id=%d", mp.proposalMaxID, propose.ID)
+		return err
 	}
 	mp.acceptedID = propose.ID
 	mp.acceptedValue = &propose.Value
@@ -644,8 +716,9 @@ func (mp *MultiPaxos) PaxosPromiseCallback(msg types.Message, pkt transport.Pack
 	//       for receiver, dont bother printing these redundant msgs
 	if promise.Step != mp.step {
 		__logger.Info().Msgf("tlc.step=%s != msg.step=%s, return", mp.step, promise.Step)
+		err := fmt.Errorf("state has changed. tlc.step=%d != msg.step=%d", mp.step, promise.Step)
 		mp.mu.Unlock()
-		return fmt.Errorf("state has changed. tlc.step=%d != msg.step=%d", mp.step, promise.Step)
+		return err
 	}
 	phase := atomic.LoadInt32(&mp.phase)
 	if phase == NOTPROPOSE {
@@ -675,8 +748,9 @@ func (mp *MultiPaxos) PaxosAcceptCallback(msg types.Message, pkt transport.Packe
 	mp.mu.Lock()
 	if accept.Step != mp.step {
 		__logger.Info().Msgf("tlc.step=%s != msg.step=%s, return", mp.step, accept.Step)
+		err := fmt.Errorf("state has changed. tlc.step=%d != msg.step=%d", mp.step, accept.Step)
 		mp.mu.Unlock()
-		return fmt.Errorf("state has changed. tlc.step=%d != msg.step=%d", mp.step, accept.Step)
+		return err
 	}
 	// TODO: do we really need to use an atomic value, or even lock?
 	phase := atomic.LoadInt32(&mp.phase)
@@ -712,9 +786,10 @@ func (mp *MultiPaxos) PaxosAcceptCallback(msg types.Message, pkt transport.Packe
 func (mp *MultiPaxos) TLCCallback(msg types.Message, pkt transport.Packet) error {
 	__logger := mp.Logger.With().Str("func", "TLCCallback").Logger()
 	tlc := msg.(*types.TLCMessage)
-	__logger.Info().Msgf("enter TLCCallback, msg=%s", tlc.String())
+	__logger.Info().Msgf("enter TLCCallback, msg=%s, pkt=%s", tlc.String(), pkt.String())
 	mp.mu.Lock()
 	defer mp.mu.Unlock()
+	// defer mp.mu.Unlock()
 	// if accept.Step != mp.step {
 	// 	__logger.Info().Msgf("tlc.step=%s != msg.step=%s, return", mp.step, accept.Step)
 	// 	mp.mu.Unlock()
@@ -724,6 +799,7 @@ func (mp *MultiPaxos) TLCCallback(msg types.Message, pkt transport.Packet) error
 		return &SenderCallbackError{fmt.Errorf("stale tlc of step=%d < mp.step=%d", tlc.Step, mp.step)}
 	}
 	if mp.tlcSent {
+		mp.tlcCh <- tlc
 		return &SenderCallbackError{fmt.Errorf("TLC is already broadcasted at step %d", mp.step)}
 	} else {
 		mp.tlcSent = true // set it to true to prevent other TLC broadcast
