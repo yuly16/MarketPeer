@@ -387,7 +387,7 @@ func (mp *MultiPaxos) Propose(value types.PaxosValue) (<-chan types.PaxosValue, 
 	} else {
 		mp.Info().Msgf("we are proposing at step=%d, phase=%d, return err=OnProposing", step, phase)
 
-		err = OnProposing
+		err = ErrOnProposing
 	}
 
 	// TODO: finish mp.stepFinish semantics

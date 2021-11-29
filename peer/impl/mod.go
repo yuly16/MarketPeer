@@ -29,7 +29,8 @@ var _logger zerolog.Logger = zerolog.New(
 		func(w *zerolog.ConsoleWriter) { w.Out = os.Stderr },
 		func(w *zerolog.ConsoleWriter) { w.TimeFormat = "15:04:05.000" })).Level(zerolog.ErrorLevel).
 	With().Timestamp().Logger()
-var _peerCount int32 = -1
+
+// var _peerCount int32 = -1
 var NONEIGHBOR string = "NONEIGHBOR"
 var ErrNotFound error = errors.New("NOTFOUND")
 
@@ -484,7 +485,7 @@ func (n *node) Tag(name string, mh string) error {
 
 		__logger.Info().Msgf("try to tag and propose on value=%v", value)
 		finish, err := n.consensus.Propose(value)
-		if errors.Is(err, OnProposing) {
+		if errors.Is(err, ErrOnProposing) {
 			__logger.Info().Msgf("it is onProposing, we need to wait for finish")
 			<-finish // wait to be done
 			__logger.Info().Msgf("finished, could start another check")
