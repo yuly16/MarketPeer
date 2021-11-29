@@ -1,6 +1,11 @@
 package impl
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+var OnProposing error = errors.New("consensus is now proposing")
 
 type SenderCallbackError struct {
 	err error

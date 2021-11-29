@@ -81,7 +81,8 @@ func (n *Messager) RumorsMsgCallback(msg types.Message, pkt transport.Packet) er
 		__logger.Info().Msg("now processing embed message")
 		if err := n.msgRegistry.ProcessPacket(pkt); err != nil {
 			__logger.Err(err).Send()
-			return fmt.Errorf("RumorsMsgCallback fail: processing rumor's embed msg fail: %w", err)
+			continue
+			// return fmt.Errorf("RumorsMsgCallback fail: processing rumor's embed msg fail: %w", err)
 		}
 	}
 
@@ -288,6 +289,7 @@ func (n *Messager) AckMsgCallback(msg types.Message, pkt transport.Packet) error
 
 func (n *Messager) PrivateMsgCallback(msg types.Message, pkt transport.Packet) error {
 	private := msg.(*types.PrivateMessage)
+	n.Info().Msgf("enter private callback, private=%s", private)
 	if _, ok := private.Recipients[n.addr()]; !ok {
 		return nil
 	}

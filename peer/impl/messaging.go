@@ -83,17 +83,6 @@ func (n *Messager) Unicast(dest string, msg transport.Message) error {
 // but still process it
 func (n *Messager) Broadcast(msg transport.Message) error {
 	n.Debug().Msg("start to broadcast")
-	// 0. process the embeded message
-	_header := transport.NewHeader(n.addr(), n.addr(), n.addr(), 0)
-	err := n.msgRegistry.ProcessPacket(transport.Packet{
-		Header: &_header,
-		Msg:    &msg,
-	})
-	if err != nil {
-		n.Err(err).Send()
-		return fmt.Errorf("Broadcast error: %w", err)
-	}
-	n.Debug().Msg("process Broad Msg done")
 
 	// 1. wrap a RumorMessage, and send it through the socket to one random neighbor
 	// once the seq is added and Rumor is constructed, this Rumor is gurantted to
@@ -130,6 +119,7 @@ func (n *Messager) Broadcast(msg transport.Message) error {
 		preNei := ""
 		tried := 0
 		acked := false
+		processed := false
 		for tried < 2 && !acked {
 			tried++
 			// ensure the randNeigh is not previous one
@@ -148,6 +138,20 @@ func (n *Messager) Broadcast(msg transport.Message) error {
 
 			n.Debug().Msgf("broadcast prepares to send pkt to %s", randNei)
 			nextDest, err := n.send(pkt)
+			if !processed {
+				processed = true
+				// 0. process the embeded message
+				_header := transport.NewHeader(n.addr(), n.addr(), n.addr(), 0)
+				err = n.msgRegistry.ProcessPacket(transport.Packet{
+					Header: &_header,
+					Msg:    &msg,
+				})
+				if err != nil {
+					n.Err(fmt.Errorf("Broadcast process local error: %w", err)).Send()
+					// return fmt.Errorf("Broadcast error: %w", err)
+				}
+				n.Debug().Msg("process Broad Msg done")
+			}
 			if err != nil {
 				n.Err(fmt.Errorf("Broadcast error: %w", err)).Send()
 				// FIXME: this early return did not delete entries
@@ -286,7 +290,7 @@ func (n *Messager) AddPeer(addr ...string) {
 	n.Info().Strs("peers", addr).Msg("adding peers")
 	for i := 0; i < len(addr); i++ {
 		n.route[addr[i]] = addr[i]
-		if _, ok := n.neighborSet[addr[i]]; !ok {
+		if _, ok := n.neighborSet[addr[i]]; !ok && addr[i] != n.addr() {
 			n.neighborSet[addr[i]] = struct{}{}
 			n.neighbors = append(n.neighbors, addr[i])
 		}
