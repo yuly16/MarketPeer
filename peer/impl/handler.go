@@ -120,6 +120,7 @@ func (n *Messager) RumorsMsgCallback(msg types.Message, pkt transport.Packet) er
 
 	// here we create a new packet and use this Messager as source, since this is a re-send rather than routing
 	// dont need to check neighbor, otherwise we cannot receive this message.
+	// TODO: it might be not right
 	randNei := n.randNeighExcept(pkt.Header.RelayedBy)
 	if randNei == pkt.Header.RelayedBy {
 		__logger.Warn().Str("callback", "RumorsMsgCallback").Msg("has only one neighbor, skip Rumor propagation")
@@ -187,19 +188,6 @@ func (n *Messager) StatusMsgCallback(msg types.Message, pkt transport.Packet) er
 	n.Debug().Msgf("meExceptOther: %v", meExceptOther)
 	n.Debug().Msgf("otherExceptMe: %v", otherExceptMe)
 
-	if otherExceptMe {
-		// send StatusMessage to other, such that other would send my-missing rumors back to me
-		if marshalErr != nil {
-			n.Err(marshalErr).Send()
-			return fmt.Errorf("StatusMsgCallback fail: send status message back: %w", marshalErr)
-		}
-		n.Info().Msgf("otherExceptMe valid, unicast statusMsg %s to %s", possibleStatusMsg, other)
-		if err := n.Unicast(other, possibleStatusMsg); err != nil {
-			n.Err(err).Send()
-			return fmt.Errorf("StatusMsgCallback fail: send status message back: %w", err)
-		}
-	}
-
 	if len(meExceptOther) > 0 {
 		// send RumorsMessage to other, which consists of missing rumors of others
 		otherMissingRumors := make([]types.Rumor, 0, 10)
@@ -218,6 +206,17 @@ func (n *Messager) StatusMsgCallback(msg types.Message, pkt transport.Packet) er
 			return fmt.Errorf("StatusMsgCallback fail: send Rumors message: %w", err)
 		}
 
+	} else if otherExceptMe {
+		// send StatusMessage to other, such that other would send my-missing rumors back to me
+		if marshalErr != nil {
+			n.Err(marshalErr).Send()
+			return fmt.Errorf("StatusMsgCallback fail: send status message back: %w", marshalErr)
+		}
+		n.Info().Msgf("otherExceptMe valid, unicast statusMsg %s to %s", possibleStatusMsg, other)
+		if err := n.Unicast(other, possibleStatusMsg); err != nil {
+			n.Err(err).Send()
+			return fmt.Errorf("StatusMsgCallback fail: send status message back: %w", err)
+		}
 	}
 
 	// me and other has exactly the same view
@@ -239,6 +238,7 @@ func (n *Messager) StatusMsgCallback(msg types.Message, pkt transport.Packet) er
 			n.Err(err).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send status message rand: %w", err)
 		}
+		n.Logger.Info().Msgf("continue mongering to neighbor %s with status=%s", nei, possibleStatus)
 	}
 
 	return nil

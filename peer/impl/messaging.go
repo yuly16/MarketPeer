@@ -103,11 +103,6 @@ func (n *Messager) Broadcast(msg transport.Message) error {
 	n.Debug().Str("seqs", fmt.Sprintf("%v", n.seqs)).Str("rumors", fmt.Sprintf("%v", n.rumors)).Msg("update seqs and rumors first")
 	n.seqMu.Unlock()
 
-	if !n.hasNeighbor() {
-		n.Warn().Msg("no neighbor, cannot broadcast, direct return")
-		return nil
-	}
-
 	ruMsg, err := n.msgRegistry.MarshalMessage(&types.RumorsMessage{Rumors: []types.Rumor{ru}})
 	if err != nil {
 		n.Err(err).Send()
@@ -116,6 +111,9 @@ func (n *Messager) Broadcast(msg transport.Message) error {
 
 	// send and wait for the ack
 	go func() {
+		if !n.hasNeighbor() {
+			n.Warn().Msg("no neighbor, cannot broadcast, direct return")
+		}
 		preNei := ""
 		tried := 0
 		acked := false

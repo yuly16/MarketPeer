@@ -36,7 +36,8 @@ func NewConsensus(on OnConsensusReach, messager peer.Messaging, callback chan *t
 	mpaxos.conf = conf
 	mpaxos.paxosID_ = conf.PaxosID
 	mpaxos.proposalID = conf.PaxosID
-	mpaxos.promiseCh = make(chan *types.PaxosPromiseMessage, conf.TotalPeers)
+	mpaxos.promiseCh = make(map[uint]chan *types.PaxosPromiseMessage)
+	mpaxos.promiseCh[0] = make(chan *types.PaxosPromiseMessage, conf.TotalPeers)
 	mpaxos.acceptCh = make(chan *types.PaxosAcceptMessage, conf.TotalPeers)
 	mpaxos.tlcCh = make(chan *types.TLCMessage, conf.TotalPeers)
 
@@ -99,7 +100,7 @@ type MultiPaxos struct {
 
 	blockchain storage.Store
 
-	promiseCh chan *types.PaxosPromiseMessage
+	promiseCh map[uint]chan *types.PaxosPromiseMessage
 	acceptCh  chan *types.PaxosAcceptMessage
 	tlcCh     chan *types.TLCMessage
 
@@ -367,11 +368,11 @@ func (mp *MultiPaxos) learnerRoutine(step uint, signalPropose chan<- types.Paxos
 
 // TODO: stepFinish need to synchronized between Tag and us, is this right?
 func (mp *MultiPaxos) Propose(value types.PaxosValue) (<-chan types.PaxosValue, error) {
-	mp.Info().Msgf("try to propose %v", value)
 	var err error = nil
 	mp.mu.Lock()
 	phase := atomic.LoadInt32(&mp.phase)
 	step := mp.step
+	mp.Info().Msgf("try to Propose %v at step %d", value, step)
 	defer func() {
 		mp.mu.Unlock()
 		if err == nil { // could propose
@@ -384,7 +385,7 @@ func (mp *MultiPaxos) Propose(value types.PaxosValue) (<-chan types.PaxosValue, 
 		mp.Info().Msgf("could propose at step=%d, transit to phase1", step)
 
 	} else {
-		mp.Info().Msgf("we are proposing at step=%d, return err=OnProposing", step)
+		mp.Info().Msgf("we are proposing at step=%d, phase=%d, return err=OnProposing", step, phase)
 
 		err = OnProposing
 	}
@@ -420,11 +421,14 @@ func (mp *MultiPaxos) advanceClockAsStep(step uint, paxosValue types.PaxosValue)
 	delete(mp.stepTLCMsgs, mp.step-1) // delete old step
 	go mp.learnerRoutine(mp.step, mp.learnerSignalPropose[mp.step])
 	mp.stepFinish[mp.step] = make(chan types.PaxosValue, 1)
+	mp.transitPhaseAsStep(mp.step, NOTPROPOSE) // before finish, then next Propose would know we are not proposing
+	mp.promiseCh[mp.step] = make(chan *types.PaxosPromiseMessage, mp.conf.TotalPeers)
+	delete(mp.promiseCh, mp.step-1)
 	mp.stepFinish[mp.step-1] <- paxosValue // this would make sure the signal is sent,
 	// TODO: fuck the test, they did not call the Tag, so I cant directly test this synchrnization...
 	// delete(mp.stepFinish, mp.step-1)       // delete old step
 
-	mp.Info().Msgf("advance step to %d, init proposalID to %d", mp.step, mp.proposalID)
+	mp.Info().Msgf("advance step to %d, init proposalID to %d, init phase to %d", mp.step, mp.proposalID, mp.phase)
 }
 
 // assumption: we are in the step, if it violates, exit immediately without side effects
@@ -443,7 +447,7 @@ func (mp *MultiPaxos) propose(value types.PaxosValue, step uint) error {
 	mp.mu.Lock()
 	// we make sure we are in the NOPROPOSE state at this line
 	// After enter phase1, we could tho also receive promise from last phase loop, but it's fine with Paxos
-	mp.promiseCh = make(chan *types.PaxosPromiseMessage, mp.conf.TotalPeers) // clear
+	promiseCh := mp.promiseCh[step] // clear
 	mp.mu.Unlock()
 
 	// phase 1
@@ -486,7 +490,7 @@ func (mp *MultiPaxos) propose(value types.PaxosValue, step uint) error {
 		promised := true
 		for i := 0; i < mp.conf.PaxosThreshold(mp.conf.TotalPeers); i++ {
 			select {
-			case promise := <-mp.promiseCh:
+			case promise := <-promiseCh:
 				if promise.AcceptedID > highestAccpetID {
 					// accept value are those accepted by the majority, so we need
 					// to follow this consensus. If there is accepted value, it is
@@ -734,7 +738,7 @@ func (mp *MultiPaxos) PaxosPromiseCallback(msg types.Message, pkt transport.Pack
 		return nil
 	}
 	// now we are in the proposer.phase1
-	mp.promiseCh <- promise // send the promise
+	mp.promiseCh[promise.Step] <- promise // send the promise
 	__logger.Info().Msgf("send the promise the promiseCh, promise=%s", *promise)
 
 	mp.mu.Unlock()
@@ -769,15 +773,19 @@ func (mp *MultiPaxos) PaxosAcceptCallback(msg types.Message, pkt transport.Packe
 	// }
 	// NOTPROPOSE=not a proposer, so if it is a proposer, then it need to be in the PHASETWO
 	if phase != NOTPROPOSE && phase != PHASETWO {
-		__logger.Info().Msgf("proposer not in phase 2, but %d, return", phase)
-		mp.mu.Unlock()
+		__logger.Warn().Msgf("proposer not in phase 2, but %d, but we still proceed", phase)
+		// mp.mu.Unlock()
 		// return fmt.Errorf("proposer not in phase 2 but %d", phase)
-		return nil
+		// return nil
 	}
 	// now we are in phase2 and same step
 	// we then could send the accept
-	mp.acceptCh <- accept
-	__logger.Info().Msgf("send accept=%s to acceptCh", *accept)
+	select {
+	case mp.acceptCh <- accept:
+		__logger.Info().Msgf("send accept=%s to acceptCh", *accept)
+	default:
+		__logger.Warn().Msgf("acceptch is blocked, skip send accept=%s", *accept)
+	}
 
 	mp.mu.Unlock()
 	return nil
