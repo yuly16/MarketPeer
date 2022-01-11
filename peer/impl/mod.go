@@ -65,11 +65,10 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	// node.neighbors = make([]string, 0)
 	// node.neighborSet = make(map[string]struct{})
 	node.Messager = NewMessager(conf)
-	node.consensusCallback = make(chan *types.PaxosValue, 10) // TODO: is this enough with 10?
 	node.consensus = NewConsensus(func(pv types.PaxosValue) error {
 		node.naming.Set(pv.Filename, []byte(pv.Metahash))
 		return nil
-	}, node.Messager, node.consensusCallback, conf)
+	}, node.Messager, conf)
 	// node.Messaging = NewMessager(conf)
 
 	if node.conf.AckTimeout == 0 {

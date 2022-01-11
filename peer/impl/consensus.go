@@ -29,7 +29,7 @@ type Clock interface {
 	StepAndMaxID() (uint, uint)
 }
 
-func NewConsensus(on OnConsensusReach, messager peer.Messaging, callback chan *types.PaxosValue, conf peer.Configuration) Consensus {
+func NewConsensus(on OnConsensusReach, messager peer.Messaging, conf peer.Configuration) Consensus {
 	mpaxos := &MultiPaxos{Messaging: messager}
 	mpaxos.Logger = _logger.With().Str("Paxos", fmt.Sprintf("%d %s", conf.PaxosID, conf.Socket.GetAddress())).Logger()
 	mpaxos.msgRegistry = conf.MessageRegistry
@@ -42,7 +42,6 @@ func NewConsensus(on OnConsensusReach, messager peer.Messaging, callback chan *t
 	mpaxos.tlcCh = make(chan *types.TLCMessage, conf.TotalPeers)
 
 	mpaxos.addr = conf.Socket.GetAddress()
-	mpaxos.applyCallback = callback
 	mpaxos.livestat = ALIVE
 	mpaxos.blockchain = conf.Storage.GetBlockchainStore()
 	mpaxos.learnerAdvance = make(chan struct{}) // synchronization, no buffer
@@ -90,8 +89,6 @@ const (
 type MultiPaxos struct {
 	peer.Messaging
 	zerolog.Logger
-
-	applyCallback chan *types.PaxosValue
 
 	msgRegistry registry.Registry
 	conf        peer.Configuration
