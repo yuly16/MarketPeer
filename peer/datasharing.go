@@ -67,6 +67,27 @@ type DataSharing interface {
 	// SearchReplyMessages received. Returns an empty string if nothing was
 	// found.
 	SearchFirst(pattern regexp.Regexp, conf ExpandingRing) (name string, err error)
+
+	// Store stores a key value into chord system.
+	// - Implemented in final project
+	Store(key string) (err error)
+
+	// Join adds current node into chord system containing a node name
+	Join(member string) (err error)
+
+	// Init inits chord network
+	Init(member string)
+
+	// Test
+	Test() uint
+
+	GetFingerTable() []uint
+
+	GetPredecessor() uint
+
+	GetSuccessor() uint
+
+	GetChordId() uint
 }
 
 // Catalog tells, for a given piece of data referenced by a key, a bag of peers

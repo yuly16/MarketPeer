@@ -81,6 +81,12 @@ type Configuration struct {
 	// retries to send a prepare when it doesn't get enough promises or accepts.
 	// Default: 5s.
 	PaxosProposerRetry time.Duration
+
+	// ChordBits is the number of bit in chord.
+	ChordBits uint
+
+	StabilizeInterval  time.Duration
+	FixFingersInterval time.Duration
 }
 
 func (conf *Configuration) String() string {

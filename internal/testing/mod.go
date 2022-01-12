@@ -147,6 +147,9 @@ type configTemplate struct {
 	paxosThreshold     func(uint) int
 	paxosID            uint
 	paxosProposerRetry time.Duration
+	chordBits          uint
+	StabilizeInterval  time.Duration
+	FixFingersInterval time.Duration
 }
 
 func newConfigTemplate() configTemplate {
@@ -181,6 +184,9 @@ func newConfigTemplate() configTemplate {
 		},
 		paxosID:            0,
 		paxosProposerRetry: time.Second * 5,
+		chordBits:          2,
+		StabilizeInterval:  time.Second * 5,
+		FixFingersInterval: time.Second * 5,
 	}
 }
 
@@ -290,6 +296,26 @@ func WithPaxosProposerRetry(d time.Duration) Option {
 	}
 }
 
+// WithChordBits sets a specific chordBits.
+func WithChordBits(d uint) Option {
+	return func(ct *configTemplate) {
+		ct.chordBits = d
+	}
+}
+
+
+func WithStabilizeInterval(d time.Duration) Option {
+	return func(ct *configTemplate) {
+		ct.StabilizeInterval = d
+	}
+}
+
+
+func WithFixFingersInterval(d time.Duration) Option {
+	return func(ct *configTemplate) {
+		ct.FixFingersInterval = d
+	}
+}
 // NewTestNode returns a new test node.
 func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	addr string, opts ...Option) TestNode {
@@ -317,7 +343,9 @@ func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	config.PaxosThreshold = template.paxosThreshold
 	config.PaxosID = template.paxosID
 	config.PaxosProposerRetry = template.paxosProposerRetry
-
+	config.ChordBits = template.chordBits
+	config.StabilizeInterval = template.StabilizeInterval
+	config.FixFingersInterval = template.FixFingersInterval
 	node := f(config)
 
 	require.Equal(t, len(template.messages), len(template.handlers))

@@ -71,6 +71,8 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	}, node.Messager, conf)
 	// node.Messaging = NewMessager(conf)
 
+	node.chord = NewChord(node.Messager, conf)
+
 	if node.conf.AckTimeout == 0 {
 		node.conf.AckTimeout = math.MaxInt64
 	}
@@ -78,6 +80,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	node.Logger = _logger.With().Str("Peer", fmt.Sprintf("%d %s", node.id, node.sock.GetAddress())).Logger()
 	_logger.Info().Int32("id", node.id).Str("addr", node.sock.GetAddress()).Msg("create new peer")
 	_logger.Debug().Msgf("conf=%s", conf.String())
+
 	return node
 }
 
@@ -94,6 +97,7 @@ type node struct {
 	consensus         Consensus
 	consensusCallback chan *types.PaxosValue
 
+	chord  *Chord
 	// storage
 	blob   storage.Store
 	naming storage.Store
@@ -128,6 +132,7 @@ type node struct {
 	// rumors map[string][]types.Rumor // key: node_addr value: rumors in increasing order of seq
 }
 
+
 // Start implements peer.Service
 func (n *node) Start() error {
 	n.Info().Msg("Starting...")
@@ -158,6 +163,8 @@ func (n *node) Start() error {
 	go n.statusReportDaemon(n.conf.AntiEntropyInterval)
 	go n.heartbeatDaemon(n.conf.HeartbeatInterval)
 	go n.applyDaemon()
+	go n.stabilize(n.conf.StabilizeInterval)
+	go n.fixFinger(n.conf.FixFingersInterval)
 	n.Info().Msg("daemons loaded")
 	n.Info().Msg("Start done")
 	return nil
@@ -170,6 +177,50 @@ func (n *node) Stop() error {
 	atomic.StoreInt32(&n.stat, KILL)
 	n.consensus.Stop()
 	return nil
+}
+
+func (n *node) Store(key string) (err error) {
+	n.chord.insertTable()
+	n.chord.readTable()
+	return nil
+}
+
+func (n *node) Join(member string) (err error) {
+	return n.chord.join(member)
+}
+
+func (n *node) Init(member string) {
+	n.chord.init(member)
+}
+
+func (n *node) Test() uint {
+	fmt.Println("--------------------------------------------------")
+	fmt.Printf("Node %d: predecessor: %d, successor: %d\n",
+		n.chord.hashKey(n.conf.Socket.GetAddress()),
+		n.chord.hashKey(n.chord.predecessor.read()),
+		n.chord.hashKey(n.chord.successor.read()))
+
+	return n.chord.chordId
+}
+
+
+// for test
+func (n *node) GetFingerTable() []uint {
+	res := make([]uint, n.conf.ChordBits)
+	for i := 0; i < int(n.conf.ChordBits); i++ {
+		str, _ := n.chord.fingerTable.load(i)
+		res[i] = n.chord.hashKey(str)
+	}
+	return res
+}
+func (n *node) GetChordId() uint {
+	return n.chord.chordId
+}
+func (n *node) GetPredecessor() uint {
+	return n.chord.hashKey(n.chord.predecessor.read())
+}
+func (n *node) GetSuccessor() uint {
+	return n.chord.hashKey(n.chord.successor.read())
 }
 
 func (n *node) searchAllFromNei(reg regexp.Regexp, budget uint, timeout time.Duration) ([]string, error) {
@@ -759,3 +810,4 @@ func (n *node) isKilled() bool {
 func (n *node) addr() string {
 	return n.sock.GetAddress()
 }
+

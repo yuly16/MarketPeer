@@ -1,6 +1,9 @@
 package impl
 
-import "math/rand"
+import (
+	"math/rand"
+	"sync"
+)
 
 // TODO: add note, we need to seperate it, because neighbors might be changed across
 // different call of neighs. this time I did not consider well on the possible inconsistency and race
@@ -35,5 +38,37 @@ func budgetAllocation(neis_ []string, budget uint) ([]string, []uint) {
 			}
 		}
 		return neis, budgets
+	}
+}
+
+type MutexString struct {
+	sync.Mutex
+	data string
+}
+
+func (m *MutexString) read() string {
+	m.Lock()
+	data := m.data
+	m.Unlock()
+	return data
+}
+
+func (m *MutexString) write(data string) {
+	m.Lock()
+	m.data = data
+	m.Unlock()
+}
+
+func betweenRightInclude(id uint, left uint, right uint) bool {
+	return between(id, left, right) || id == right
+}
+
+func between(id uint, left uint, right uint) bool {
+	if right > left {
+		return id > left && id < right
+	} else if right < left {
+		return id < right || id > left
+	} else {
+		return false
 	}
 }

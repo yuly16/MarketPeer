@@ -42,7 +42,7 @@ func (t *Transport) CreateSocket(address string) (transport.ClosableSocket, erro
 		address = fmt.Sprintf("%s:%d", address, port)
 	}
 	// assign each address a channel to send/recv messages(buffered channel)
-	t.incomings[address] = make(chan transport.Packet, 100)
+	t.incomings[address] = make(chan transport.Packet, 3000)
 	t.Unlock()
 
 	return &Socket{
