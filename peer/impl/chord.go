@@ -44,12 +44,30 @@ func NewChord(messager peer.Messaging, conf peer.Configuration) *Chord {
 	chordInstance.findSuccessorCh = make(map[uint]chan types.ChordFindSuccessorReplyMessage)
 	chordInstance.askPredecessorCh = make(chan types.ChordReplyPredecessorMessage, 1)
 
-
+	chordInstance.blockStore.data = make(map[uint]uint)
 
 	return &chordInstance
 }
 
+type ChordStorage struct {
+	sync.Mutex
+	data map[uint]uint
+}
 
+func (c *ChordStorage) get(key uint) (uint, bool) {
+	c.Lock()
+	defer c.Unlock()
+	data, ok := c.data[key]
+	return data, ok
+}
+
+func (c *ChordStorage) put(key uint, data uint) {
+	c.Lock()
+	defer c.Unlock()
+	c.data[key] = data
+}
+
+//func (c *ChordStorage)
 type Chord struct {
 	peer.Messaging
 	zerolog.Logger
@@ -65,7 +83,13 @@ type Chord struct {
 	findSuccessorCh     map[uint]chan types.ChordFindSuccessorReplyMessage
 	askPredecessorCh    chan types.ChordReplyPredecessorMessage
 	fingerTable         *FingerTable
+
+	blockStore          ChordStorage
 }
+
+//The identifier length m must
+//be large enough to make the probability of two nodes or keys
+//hashing to the same identifier negligible.
 
 func (c *Chord) hashKey(key string) uint {
 	h := sha1.New()
@@ -97,7 +121,15 @@ func (c *Chord) closestPrecedingNode(id uint) (string, error) {
 // find the successor of id, and return the address of successor
 func (c *Chord) findSuccessor(id uint) (string, error) {
 	successor := c.successor.read()
-
+	predecessor := c.predecessor.read()
+	// case 0: if id is in (predecessor, chordId], return current node
+	// refer to https://www.kth.se/social/upload/51647996f276545db53654c0/3-chord.pdf page 22
+	// FIXME: not sure about this. The paper doesn't mention it
+	if id == c.chordId ||
+		(predecessor != "" &&
+			betweenRightInclude(id, c.hashKey(predecessor), c.chordId)) {
+		return c.conf.Socket.GetAddress(), nil
+	}
 	// case 1: if successor = "". This case happens in the initialization of chord
 	if successor == "" {
 		return c.conf.Socket.GetAddress(), nil
@@ -160,14 +192,14 @@ func (c *Chord) FindSuccessorRemote(dest string, id uint) (string, error) {
 	if err := c.RequestSuccessorRemote(c.conf.Socket.GetAddress(), dest, id); err != nil {
 		return "", err
 	}
-	log.Info().Msgf("FindSuccessorRemote: %d waits successorReply, send to %d, id = %d\n",
+	log.Debug().Msgf("FindSuccessorRemote: %d waits successorReply, send to %d, id = %d\n",
 		c.chordId, c.hashKey(dest), id)
 
 	// waiting for successor of id
 	timer := time.After(500 * time.Second)
 	select {
 	case findSuccMsg := <- findSuccCh:
-		log.Info().Msgf("FindSuccessorRemote: %d receives successorReply from %d, id = %d\n",
+		log.Debug().Msgf("FindSuccessorRemote: %d receives successorReply from %d, id = %d\n",
 			c.chordId, c.hashKey(dest), id)
 		return findSuccMsg.Dest, nil
 	case <-timer:
@@ -215,7 +247,7 @@ func (c *Chord) Stabilize() error {
 		if ReplyPredecessorMsg.Predecessor != "" &&
 			between(c.hashKey(ReplyPredecessorMsg.Predecessor), c.chordId, c.hashKey(successor)) {
 			c.successor.write(ReplyPredecessorMsg.Predecessor)
-			//log.Info().Msgf("Stabilize: %d receives successor %d's predecessor %d as new successor\n",
+			//log.Debug().Msgf("Stabilize: %d receives successor %d's predecessor %d as new successor\n",
 			//	c.chordId, c.hashKey(successor), c.hashKey(ReplyPredecessorMsg.Predecessor))
 		}
 		// need to refresh successor!
@@ -241,7 +273,7 @@ func (c *Chord) FixFinger() error {
 	if err != nil {
 		return err
 	}
-	if fingerTableItem != c.conf.Socket.GetAddress() || fingerTableItem != "" {
+	if fingerTableItem != "" {
 		err1 := c.fingerTable.insert(int(c.fingerTable.fixPointer), fingerTableItem)
 		if err1 != nil {
 			return err1
@@ -254,12 +286,30 @@ func (c *Chord) FixFinger() error {
 
 func (c *Chord) ChordFindSuccessorCallback(msg types.Message, pkt transport.Packet) error {
 	successor := c.successor.read()
+	predecessor := c.predecessor.read()
 	findSuccessorMsg := msg.(*types.ChordFindSuccessorMessage)
-	log.Info().Msgf("ChordFindSuccessorCallback: %d receives findSuccessor of %d, id = %d\n",
-		c.chordId, findSuccessorMsg.Source, findSuccessorMsg.ID)
+	log.Debug().Msgf("ChordFindSuccessorCallback: %d receives findSuccessor of %d, id = %d\n",
+		c.chordId, c.hashKey(findSuccessorMsg.Source), findSuccessorMsg.ID)
 	if successor == c.conf.Socket.GetAddress() {
 		return fmt.Errorf("ChordFindSuccessorCallback: successor is equal to currnode! ")
 	}
+	// case 0: if id is in (predecessor, chordId], return current node
+	// refer to https://www.kth.se/social/upload/51647996f276545db53654c0/3-chord.pdf page 22
+	// FIXME: not sure about this. The paper doesn't mention it
+	if findSuccessorMsg.ID == c.chordId ||
+		(predecessor != "" &&
+			betweenRightInclude(findSuccessorMsg.ID, c.hashKey(predecessor), c.chordId)) {
+		msg, err := c.msgRegistry.MarshalMessage(
+			types.ChordFindSuccessorReplyMessage{Dest: c.conf.Socket.GetAddress(), ID: findSuccessorMsg.ID})
+		if err != nil {
+			return err
+		}
+		errUnicast := c.Messaging.Unicast(findSuccessorMsg.Source, msg)
+		if errUnicast != nil {
+			return errUnicast
+		}
+	}
+
 	// case 1: if successor = "". This case happens in the initialization of chord
 	if successor == "" {
 		msg, err := c.msgRegistry.MarshalMessage(
@@ -267,9 +317,9 @@ func (c *Chord) ChordFindSuccessorCallback(msg types.Message, pkt transport.Pack
 		if err != nil {
 			return err
 		}
-		log.Info().Msgf("ChordFindSuccessorCallback: Successor = nil. " +
-			"%d sends findSuccessorReply to %d, id = %d\n",
-			c.chordId, findSuccessorMsg.Source, findSuccessorMsg.ID)
+		//log.Debug().Msgf("ChordFindSuccessorCallback: case 1 : Successor = nil. " +
+		//	"%d sends findSuccessorReply to %d, id = %d\n",
+		//	c.chordId, c.hashKey(findSuccessorMsg.Source), findSuccessorMsg.ID)
 		errUnicast := c.Messaging.Unicast(findSuccessorMsg.Source, msg)
 		if errUnicast != nil {
 			return errUnicast
@@ -281,7 +331,7 @@ func (c *Chord) ChordFindSuccessorCallback(msg types.Message, pkt transport.Pack
 		if err != nil {
 			return err
 		}
-		log.Info().Msgf("ChordFindSuccessorCallback: Successor = %d. " +
+		log.Debug().Msgf("ChordFindSuccessorCallback: case 2 Successor = %d. " +
 			"%d sends findSuccessorReply to %d, id = %d\n",
 			c.hashKey(successor), c.chordId, findSuccessorMsg.Source, findSuccessorMsg.ID)
 		errUnicast := c.Messaging.Unicast(findSuccessorMsg.Source, msg)
@@ -289,21 +339,34 @@ func (c *Chord) ChordFindSuccessorCallback(msg types.Message, pkt transport.Pack
 			return errUnicast
 		}
 	} else {
-		log.Info().Msgf("ChordFindSuccessorCallback: X Successor = %d. " +
-			"%d relay to %d, id = %d\n",
-			c.hashKey(successor), c.chordId, findSuccessorMsg.Source, findSuccessorMsg.ID)
 		nStar, err1 := c.closestPrecedingNode(findSuccessorMsg.ID)
 		if err1 != nil {
 			return err1
 		}
 
 		if nStar == c.conf.Socket.GetAddress() {
-			nStar = successor
+			msg, err := c.msgRegistry.MarshalMessage(
+				types.ChordFindSuccessorReplyMessage{Dest: successor, ID: findSuccessorMsg.ID})
+			if err != nil {
+				return err
+			}
+			log.Debug().Msgf("ChordFindSuccessorCallback: case 3.1 Successor = %d. " +
+				"%d sends findSuccessorReply to %d, id = %d\n",
+				c.hashKey(successor), c.chordId, findSuccessorMsg.Source, findSuccessorMsg.ID)
+			errUnicast := c.Messaging.Unicast(findSuccessorMsg.Source, msg)
+			if errUnicast != nil {
+				return errUnicast
+			}
+		} else {
+			log.Debug().Msgf("ChordFindSuccessorCallback: case 3.2 Source = %d. " +
+				"%d relay to %d, id = %d\n",
+				c.hashKey(findSuccessorMsg.Source), c.chordId, c.hashKey(nStar), findSuccessorMsg.ID)
+			if err := c.RequestSuccessorRemote(findSuccessorMsg.Source,
+				nStar, findSuccessorMsg.ID); err != nil {
+				return err
+			}
 		}
-		if err := c.RequestSuccessorRemote(findSuccessorMsg.Source,
-			nStar, findSuccessorMsg.ID); err != nil {
-			return err
-		}
+
 	}
 	return nil
 }
@@ -346,7 +409,7 @@ func (c *Chord) ChordNotifyCallback(msg types.Message, pkt transport.Packet) err
 	if predecessor == "" ||
 		between(nStarId, c.hashKey(predecessor), c.chordId) {
 		c.predecessor.write(nStar)
-		//log.Info().Msgf("NotifyCallback: %d receives %d as predecessor\n", c.chordId, nStarId)
+		//log.Debug().Msgf("NotifyCallback: %d receives %d as predecessor\n", c.chordId, nStarId)
 	}
 	return nil
 }

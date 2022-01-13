@@ -193,7 +193,36 @@ func (n *node) Init(member string) {
 	n.chord.init(member)
 }
 
-func (n *node) Test() uint {
+func (n *node) Lookup(key string) (string, error) {
+	fmt.Printf("hash key of %s is %d\n", key, n.chord.hashKey(key))
+	destination, err := n.chord.findSuccessor(n.chord.hashKey(key))
+	fmt.Printf("dest is %d\n", n.chord.hashKey(destination))
+	return destination, err
+}
+
+func (n *node) LookupHashId(key uint) (uint, error) {
+	destination, err := n.chord.findSuccessor(key)
+	return n.chord.hashKey(destination), err
+}
+
+func (n *node) Get(key string) (string, bool) {
+	// TODO: implemented when blockchain and smart contract finishes
+	return "", true
+}
+
+func (n *node) Put(key string, data uint) {
+	// TODO: implemented when blockchain and smart contract finishes
+}
+
+func (n *node) GetId(key uint) (uint, bool) {
+	return n.chord.blockStore.get(key)
+}
+
+func (n *node) PutId(key uint, data uint) {
+	n.chord.blockStore.put(key, data)
+}
+
+func (n *node) PrintInfo() uint {
 	fmt.Println("--------------------------------------------------")
 	fmt.Printf("Node %d: predecessor: %d, successor: %d\n",
 		n.chord.hashKey(n.conf.Socket.GetAddress()),

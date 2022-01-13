@@ -78,8 +78,26 @@ type DataSharing interface {
 	// Init inits chord network
 	Init(member string)
 
-	// Test
-	Test() uint
+	// PrintInfo is used for debug
+	PrintInfo() uint
+
+	// Lookup returns the ip address that is responsible for this key
+	Lookup(key string) (string, error)
+
+	// Lookup returns the ip address that is responsible for this key
+	LookupHashId(key uint) (uint, error)
+
+	// GetId acquire the value of key
+	GetId(key uint) (uint, bool)
+
+	// PutId puts key into current node
+	PutId(key uint, data uint)
+
+	// Get acquire the value of key
+	Get(key string) (string, bool)
+
+	// Put puts key into current node
+	Put(key string, data uint)
 
 	GetFingerTable() []uint
 
