@@ -24,7 +24,7 @@ type BlockHeader struct {
 
 type Block struct {
 	header       BlockHeader
-	state        storage.KV
+	state        storage.KV // addr -> addr_state. addr_state is json_marshaled
 	transactions storage.KV
 	receipts     storage.KV
 }
@@ -36,13 +36,13 @@ type BlockBuilder struct {
 	beneficiary  account.Address
 	difficulty   int
 	number       int
-	state        storage.KV
+	state        storage.KV // addr -> *account_state
 	transactions storage.KV
 	receipts     storage.KV
 }
 
-func NewBlockBuilder() *BlockBuilder {
-	return &BlockBuilder{}
+func NewBlockBuilder(factory storage.KVFactory) *BlockBuilder {
+	return &BlockBuilder{state: factory(), transactions: factory(), receipts: factory()}
 }
 
 func (bb *BlockBuilder) setParentHash(parent string) *BlockBuilder {
@@ -77,6 +77,14 @@ func (bb *BlockBuilder) setNumber(number int) *BlockBuilder {
 
 func (bb *BlockBuilder) setState(state storage.KV) *BlockBuilder {
 	bb.state = state
+	return bb
+}
+
+func (bb *BlockBuilder) setAddrState(addr *account.Address, s *account.State) *BlockBuilder {
+	err := bb.state.Put(addr.String(), s)
+	if err != nil {
+		panic(err)
+	}
 	return bb
 }
 
@@ -144,16 +152,27 @@ func (b *Block) String() string {
 	row1 := fmt.Sprintf("%s| %s", padOrCrop("prev", 6), b.header.parentHash)
 	row2 := fmt.Sprintf("%s| %d", padOrCrop("idx", 6), b.header.number)
 	row3 := fmt.Sprintf("%s| %s", padOrCrop("time", 6), time.UnixMilli(b.header.timestamp))
-	maxLen := max(row1, row2, row3)
+	row4 := fmt.Sprintf("%s| %s", padOrCrop("state", 6), b.state)
+	row5 := fmt.Sprintf("%s| %s", padOrCrop("txns", 6), b.transactions)
+	row6 := fmt.Sprintf("%s| %s", padOrCrop("recps", 6), b.receipts)
+
+	maxLen := max(row1, row2, row3, row4, row5, row6)
 	row1 = padOrCrop(row1, maxLen)
 	row2 = padOrCrop(row2, maxLen)
 	row3 = padOrCrop(row3, maxLen)
+	row4 = padOrCrop(row4, maxLen)
+	row5 = padOrCrop(row5, maxLen)
+	row6 = padOrCrop(row6, maxLen)
 
 	ret := ""
 	ret += fmt.Sprintf("\n┌%s┐\n", strings.Repeat("─", maxLen+2))
 	ret += fmt.Sprintf("|%s  |\n", row1)
 	ret += fmt.Sprintf("|%s  |\n", row2)
 	ret += fmt.Sprintf("|%s  |\n", row3)
+	ret += fmt.Sprintf("|%s  |\n", row4)
+	ret += fmt.Sprintf("|%s  |\n", row5)
+	ret += fmt.Sprintf("|%s  |\n", row6)
+
 	ret += fmt.Sprintf("└%s┘\n", strings.Repeat("─", maxLen+2))
 	return ret
 }

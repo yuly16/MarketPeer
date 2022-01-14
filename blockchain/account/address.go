@@ -1,14 +1,16 @@
 package account
 
+import "encoding/hex"
+
 type Address struct {
-	addr [20]byte
+	addr [8]byte
 }
 
-func NewAddress(addr [20]byte) *Address {
+func NewAddress(addr [8]byte) *Address {
 	a := &Address{addr: addr}
 	return a
 }
 
 func (a *Address) String() string {
-	return string(a.addr[:])
+	return hex.EncodeToString(a.addr[:])
 }
