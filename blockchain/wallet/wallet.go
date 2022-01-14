@@ -8,6 +8,7 @@ import (
 	"go.dedis.ch/cs438/blockchain/messaging"
 	"go.dedis.ch/cs438/blockchain/transaction"
 	"go.dedis.ch/cs438/logging"
+	"go.dedis.ch/cs438/types"
 )
 
 type WalletConf struct {
@@ -57,9 +58,23 @@ func (w *Wallet) transferEpfer(dest account.Account, epfer int) {
 // transaction is signed or not?
 // how is digital coin represented?
 func (w *Wallet) submitTxn(txn transaction.Transaction) {
-
+	txnMessage := types.WalletTransactionMessage{Txn: txn}
+	
+	err := w.messaging.Broadcast(txnMessage)
+	if err != nil {
+		w.logger.Error().Msg("submitTxn: broadcast a transantion error. ")
+	}
 }
 
 func (w *Wallet) signTxn() {}
 
-func (w *Wallet) registerCallbacks() {}
+func (w *Wallet) registerCallbacks() {
+	w.messaging.RegisterMessageCallback(types.WalletTransactionMessage{}, w.WalletTxnMsgCallback)
+}
+
+//--------------The following code is just for debug -------------------//
+
+func (w *Wallet) Test_submitTxn() {
+	txn := transaction.NewTransaction()
+	w.submitTxn(txn)
+}

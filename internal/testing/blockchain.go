@@ -75,10 +75,11 @@ func WithPublicKey(public rsa.PublicKey) Option {
 }
 
 // construct a fullnode for testing purpose
-func NewTestFullNode(t *testing.T, opts ...Option) *blockchain.FullNode {
+func NewTestFullNode(t *testing.T, opts ...Option) (*blockchain.FullNode, messaging.Messager) {
 	template := newConfigTemplate()
 	for _, opt := range opts {
 		opt(&template)
 	}
-	return blockchain.NewFullNode(buildFullNodeConf(&template))
+	fullNodeConf := buildFullNodeConf(&template)
+	return blockchain.NewFullNode(fullNodeConf), fullNodeConf.Messaging
 }

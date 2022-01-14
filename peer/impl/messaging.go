@@ -153,6 +153,16 @@ func (m *Messager) listenDaemon() {
 func (m *Messager) Start() error {
 	m.stat = ALIVE
 	m.Info().Msg("loading daemons...")
+	m.msgRegistry.RegisterMessageCallback(types.ChatMessage{}, types.ChatMsgCallback)
+	m.Trace().Msg("register callback for `ChatMessage`")
+	m.msgRegistry.RegisterMessageCallback(types.RumorsMessage{}, m.RumorsMsgCallback)
+	m.Trace().Msg("register callback for `RumorsMessage`")
+	m.msgRegistry.RegisterMessageCallback(types.StatusMessage{}, m.StatusMsgCallback)
+	m.Trace().Msg("register callback for `StatusMessage`")
+	m.msgRegistry.RegisterMessageCallback(types.AckMessage{}, m.AckMsgCallback)
+	m.Trace().Msg("register callback for `AckMessage`")
+	m.msgRegistry.RegisterMessageCallback(types.EmptyMessage{}, types.EmptyMsgCallback)
+	m.Trace().Msg("register callback for `EmptyMessage`")
 	go m.listenDaemon()
 	go m.statusReportDaemon(m.conf.AntiEntropyInterval)
 	go m.heartbeatDaemon(m.conf.HeartbeatInterval)
@@ -235,6 +245,13 @@ func (m *Messager) Broadcast(msg transport.Message) error {
 	go func() {
 		if !m.hasNeighbor() {
 			m.Warn().Msg("no neighbor, cannot broadcast, direct return")
+			// 0. if no neighbour, then directly process the embeded message
+			_header := transport.NewHeader(m.addr(), m.addr(), m.addr(), 0)
+			err = m.msgRegistry.ProcessPacket(transport.Packet{
+				Header: &_header,
+				Msg:    &msg,
+			})
+			return
 		}
 		preNei := ""
 		tried := 0
@@ -391,7 +408,9 @@ func (m *Messager) nextHop(dest string) (string, error) {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
+	if dest == NONEIGHBOR {
+		fmt.Println("sgfdg")
+	}
 	// dest must be known
 	nextDest, ok := m.route[dest]
 	var err error

@@ -21,7 +21,7 @@ func TestBuildFullNode(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 16)
 	require.NoError(t, err)
 	publicKey := privateKey.PublicKey
-	fullNode := z.NewTestFullNode(t,
+	fullNode, _ := z.NewTestFullNode(t,
 		z.WithSocket(sock),
 		z.WithMessageRegistry(standard.NewRegistry()),
 		z.WithPrivateKey(*privateKey),
