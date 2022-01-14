@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+var DUMMY_PARENT_HASH string = strings.Repeat("0", 64)
+
 type BlockHeader struct {
 	parentHash       string // hex form
 	nonce            string // TODO
@@ -45,12 +47,12 @@ func NewBlockBuilder(factory storage.KVFactory) *BlockBuilder {
 	return &BlockBuilder{state: factory(), transactions: factory(), receipts: factory()}
 }
 
-func (bb *BlockBuilder) setParentHash(parent string) *BlockBuilder {
+func (bb *BlockBuilder) SetParentHash(parent string) *BlockBuilder {
 	bb.parentHash = parent
 	return bb
 }
 
-func (bb *BlockBuilder) setNonce(nonce string) *BlockBuilder {
+func (bb *BlockBuilder) SetNonce(nonce string) *BlockBuilder {
 	bb.nonce = nonce
 	return bb
 }
@@ -60,7 +62,7 @@ func (bb *BlockBuilder) setTimeStamp(stamp int64) *BlockBuilder {
 	return bb
 }
 
-func (bb *BlockBuilder) setBeneficiary(beneficiary account.Address) *BlockBuilder {
+func (bb *BlockBuilder) SetBeneficiary(beneficiary account.Address) *BlockBuilder {
 	bb.beneficiary = beneficiary
 	return bb
 }
@@ -70,7 +72,7 @@ func (bb *BlockBuilder) setDifficulty(difficulty int) *BlockBuilder {
 	return bb
 }
 
-func (bb *BlockBuilder) setNumber(number int) *BlockBuilder {
+func (bb *BlockBuilder) SetNumber(number int) *BlockBuilder {
 	bb.number = number
 	return bb
 }
@@ -80,7 +82,7 @@ func (bb *BlockBuilder) setState(state storage.KV) *BlockBuilder {
 	return bb
 }
 
-func (bb *BlockBuilder) setAddrState(addr *account.Address, s *account.State) *BlockBuilder {
+func (bb *BlockBuilder) SetAddrState(addr *account.Address, s *account.State) *BlockBuilder {
 	err := bb.state.Put(addr.String(), s)
 	if err != nil {
 		panic(err)
@@ -98,7 +100,7 @@ func (bb *BlockBuilder) setReceipts(receipts storage.KV) *BlockBuilder {
 	return bb
 }
 
-func (bb *BlockBuilder) build() *Block {
+func (bb *BlockBuilder) Build() *Block {
 	header := BlockHeader{
 		parentHash:       bb.parentHash,
 		nonce:            bb.nonce,

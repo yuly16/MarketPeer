@@ -1,9 +1,12 @@
 package testing
 
 import (
-	"crypto/rsa"
+	"crypto/ecdsa"
 	"go.dedis.ch/cs438/blockchain"
+	"go.dedis.ch/cs438/blockchain/account"
+	"go.dedis.ch/cs438/blockchain/block"
 	"go.dedis.ch/cs438/blockchain/messaging"
+	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/peer/impl"
 	"testing"
@@ -36,8 +39,10 @@ func buildFullNodeConf(temp *configTemplate) *blockchain.FullNodeConf {
 	conf.Addr = temp.sock.GetAddress()
 	conf.PrivateKey = temp.privateKey
 	conf.PublicKey = temp.publicKey
+	conf.Account = temp.acc
 	peerMessagerConf := buildPeerNodeConf(temp)
 	conf.Messaging = messaging.NewRegistryMessager(conf.Addr, impl.NewMessager(*peerMessagerConf), temp.registry)
+	conf.Bootstrap = temp.blockchain
 	return conf
 }
 
@@ -62,23 +67,38 @@ func buildPeerNodeConf(template *configTemplate) *peer.Configuration {
 }
 
 // WithAutostart sets the autostart option.
-func WithPrivateKey(private rsa.PrivateKey) Option {
+func WithPrivateKey(private *ecdsa.PrivateKey) Option {
 	return func(ct *configTemplate) {
 		ct.privateKey = private
+		ct.publicKey = &private.PublicKey
 	}
 }
 
-func WithPublicKey(public rsa.PublicKey) Option {
+// WithAccount directly initialize some account state
+func WithAccount(acc *account.Account) Option {
 	return func(ct *configTemplate) {
-		ct.publicKey = public
+		ct.acc = acc
+	}
+}
+
+func WithGenesisBlock(genesis *block.Block) Option {
+	return func(ct *configTemplate) {
+		ct.blockchain.Append(genesis)
+	}
+}
+
+func WithKVFactory(factory storage.KVFactory) Option {
+	return func(ct *configTemplate) {
+		ct.kvFactory = factory
 	}
 }
 
 // construct a fullnode for testing purpose
-func NewTestFullNode(t *testing.T, opts ...Option) *blockchain.FullNode {
+func NewTestFullNode(t *testing.T, opts ...Option) (*blockchain.FullNode, messaging.Messager) {
 	template := newConfigTemplate()
 	for _, opt := range opts {
 		opt(&template)
 	}
-	return blockchain.NewFullNode(buildFullNodeConf(&template))
+	fullNodeConf := buildFullNodeConf(&template)
+	return blockchain.NewFullNode(fullNodeConf), fullNodeConf.Messaging
 }
