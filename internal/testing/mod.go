@@ -2,11 +2,14 @@ package testing
 
 import (
 	"bytes"
-	"crypto/rsa"
+	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"go.dedis.ch/cs438/blockchain/account"
+	"go.dedis.ch/cs438/blockchain/block"
+	chainStorage "go.dedis.ch/cs438/blockchain/storage"
 	"io"
 	"math/rand"
 
@@ -154,8 +157,11 @@ type configTemplate struct {
 	FixFingersInterval time.Duration
 
 	// blockchain-related
-	privateKey rsa.PrivateKey
-	publicKey  rsa.PublicKey
+	privateKey *ecdsa.PrivateKey
+	publicKey  *ecdsa.PublicKey
+	blockchain *block.BlockChain
+	kvFactory  chainStorage.KVFactory
+	acc        *account.Account // TODO: update WalletConf directly with Account
 }
 
 func newConfigTemplate() configTemplate {
@@ -193,6 +199,9 @@ func newConfigTemplate() configTemplate {
 		chordBits:          2,
 		StabilizeInterval:  time.Second * 5,
 		FixFingersInterval: time.Second * 5,
+
+		blockchain: block.NewBlockChain(),
+		kvFactory:  chainStorage.CreateSimpleKV,
 	}
 }
 
