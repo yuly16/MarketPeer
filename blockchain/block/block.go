@@ -16,7 +16,7 @@ type BlockHeader struct {
 	timestamp        int64  // unix millseconds
 	beneficiary      account.Address
 	difficulty       int
-	number           uint32
+	number           int
 	stateHash        string
 	transactionsHash string
 	receiptsHash     string
@@ -30,9 +30,19 @@ type Block struct {
 }
 
 type BlockBuilder struct {
-	parentHash string // hex form
-	nonce      string // TODO
+	parentHash   string // hex form
+	nonce        string // TODO
+	timestamp    int64  // unix millseconds
+	beneficiary  account.Address
+	difficulty   int
+	number       int
+	state        storage.KV
+	transactions storage.KV
+	receipts     storage.KV
+}
 
+func NewBlockBuilder() *BlockBuilder {
+	return &BlockBuilder{}
 }
 
 func (bb *BlockBuilder) setParentHash(parent string) *BlockBuilder {
@@ -45,9 +55,61 @@ func (bb *BlockBuilder) setNonce(nonce string) *BlockBuilder {
 	return bb
 }
 
-//func (bb *BlockBuilder) build() *Block {
-//
-//}
+func (bb *BlockBuilder) setTimeStamp(stamp int64) *BlockBuilder {
+	bb.timestamp = stamp
+	return bb
+}
+
+func (bb *BlockBuilder) setBeneficiary(beneficiary account.Address) *BlockBuilder {
+	bb.beneficiary = beneficiary
+	return bb
+}
+
+func (bb *BlockBuilder) setDifficulty(difficulty int) *BlockBuilder {
+	bb.difficulty = difficulty
+	return bb
+}
+
+func (bb *BlockBuilder) setNumber(number int) *BlockBuilder {
+	bb.number = number
+	return bb
+}
+
+func (bb *BlockBuilder) setState(state storage.KV) *BlockBuilder {
+	bb.state = state
+	return bb
+}
+
+func (bb *BlockBuilder) setTxns(txns storage.KV) *BlockBuilder {
+	bb.transactions = txns
+	return bb
+}
+
+func (bb *BlockBuilder) setReceipts(receipts storage.KV) *BlockBuilder {
+	bb.receipts = receipts
+	return bb
+}
+
+func (bb *BlockBuilder) build() *Block {
+	header := BlockHeader{
+		parentHash:       bb.parentHash,
+		nonce:            bb.nonce,
+		timestamp:        bb.timestamp,
+		beneficiary:      bb.beneficiary,
+		difficulty:       bb.difficulty,
+		number:           bb.number,
+		stateHash:        bb.state.Hash(),
+		transactionsHash: bb.transactions.Hash(),
+		receiptsHash:     bb.receipts.Hash(),
+	}
+	return &Block{
+		header:       header,
+		state:        bb.state,
+		transactions: bb.transactions,
+		receipts:     bb.receipts,
+	}
+
+}
 
 // Hash returns the hex-encoded sha256 bytes
 func (b *Block) Hash() string {
@@ -71,16 +133,27 @@ func (b *Block) String() string {
 		return max
 	}
 
-	row1 := fmt.Sprintf("prev | %s", b.header.parentHash)
-	row2 := fmt.Sprintf("idx | %d", b.header.number)
-	row3 := fmt.Sprintf("time | %s", time.UnixMilli(b.header.timestamp))
+	padOrCrop := func(s string, maxlen int) string {
+		if len(s) >= maxlen {
+			return s[:maxlen]
+		} else {
+			return s + strings.Repeat(" ", maxlen-len(s))
+		}
+	}
+
+	row1 := fmt.Sprintf("%s| %s", padOrCrop("prev", 6), b.header.parentHash)
+	row2 := fmt.Sprintf("%s| %d", padOrCrop("idx", 6), b.header.number)
+	row3 := fmt.Sprintf("%s| %s", padOrCrop("time", 6), time.UnixMilli(b.header.timestamp))
 	maxLen := max(row1, row2, row3)
+	row1 = padOrCrop(row1, maxLen)
+	row2 = padOrCrop(row2, maxLen)
+	row3 = padOrCrop(row3, maxLen)
 
 	ret := ""
 	ret += fmt.Sprintf("\n┌%s┐\n", strings.Repeat("─", maxLen+2))
-	ret += fmt.Sprintf("|%s|\n", row1)
-	ret += fmt.Sprintf("|%s|\n", row2)
-	ret += fmt.Sprintf("|%s|\n", row3)
+	ret += fmt.Sprintf("|%s  |\n", row1)
+	ret += fmt.Sprintf("|%s  |\n", row2)
+	ret += fmt.Sprintf("|%s  |\n", row3)
 	ret += fmt.Sprintf("└%s┘\n", strings.Repeat("─", maxLen+2))
 	return ret
 }

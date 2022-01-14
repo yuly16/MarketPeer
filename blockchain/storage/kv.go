@@ -4,7 +4,6 @@ import (
 	"crypto"
 	"encoding/hex"
 	"errors"
-	"fmt"
 )
 
 var ErrKeyNotFound error = errors.New("key not found")
@@ -22,6 +21,10 @@ type KV interface {
 
 type SimpleKV struct {
 	kv map[string][]byte
+}
+
+func NewSimpleKV() *SimpleKV {
+	return &SimpleKV{}
 }
 
 func (skv *SimpleKV) Get(key []byte) ([]byte, error) {
@@ -49,18 +52,18 @@ func (skv *SimpleKV) Del(key []byte, value []byte) error {
 	return nil
 }
 
-func (skv *SimpleKV) Hash() (string, error) {
+func (skv *SimpleKV) Hash() string {
 	h := crypto.SHA256.New()
 	for key, value := range skv.kv {
 		_, err := h.Write([]byte(key))
 		if err != nil {
-			return "", fmt.Errorf("hash error: %w", err)
+			panic(err)
 		}
 		_, err = h.Write(value)
 		if err != nil {
-			return "", fmt.Errorf("hash error: %w", err)
+			panic(err)
 		}
 	}
 
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return hex.EncodeToString(h.Sum(nil))
 }

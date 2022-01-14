@@ -15,6 +15,17 @@ func (bc *BlockChain) Append(block *Block) error {
 }
 
 func (bc *BlockChain) String() string {
-
-	return ""
+	// from latest to oldest
+	arrow := "↑\n|\n"
+	ret := ""
+	if len(bc.blocks) == 0 {
+		return ""
+	}
+	ret += bc.blocks[len(bc.blocks)-1].String()
+	for i := len(bc.blocks) - 2; i >= 0; i-- {
+		b := bc.blocks[i]
+		ret += arrow
+		ret += b.String()
+	}
+	return ret
 }
