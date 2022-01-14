@@ -1,6 +1,9 @@
 package impl
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/alecthomas/participle/v2" // lib for building the parser
 	"github.com/alecthomas/participle/v2/lexer" // lib for building the lexer
 )
@@ -93,4 +96,47 @@ func Parse(plain_code string) (Code, error){
 }
 
 
+// Provides ToString for each type of elements
+//
+//
+
+func (v Value) ToString() string {
+	if v.String != nil {
+		return *v.String
+	} else {
+		return fmt.Sprintf("%f", *v.Number) 
+	}
+}
+
+func (v Field) ToString() string {
+	return v.Name
+}
+
+func (v Action) ToString() string {
+	out := new(strings.Builder)
+	out.WriteString("[Action] " + v.Role + " " + v.Action + " (")
+	for _, param := range v.Params {
+		out.WriteString(" " + param.ToString())
+	}
+	out.WriteString(" )")
+
+	return out.String()
+}
+
+func (v Object) ToString() string {
+	out := new(strings.Builder)
+	out.WriteString(v.Role)
+	for _, field := range v.Fields {
+		out.WriteString("." + field.ToString())
+	}
+
+	return out.String()
+}
+
+func (v Condition) ToString() string {
+	out := new(strings.Builder)
+	out.WriteString("[Condition] " + v.Object.ToString() + " " + v.Op + " " + v.Value.ToString())
+	
+	return out.String()
+}
 

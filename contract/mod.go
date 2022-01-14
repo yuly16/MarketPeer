@@ -21,4 +21,7 @@ type SmartContract interface {
 	// deprecated - implemented with marshal and unmarshal
 	// ToByteCode() (code_byte []byte, error)
 
+	String() (string)
+
+	Marshal() ([]byte, error)
 }
