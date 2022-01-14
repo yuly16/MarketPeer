@@ -7,8 +7,9 @@ import (
 
 type State struct {
 	// TODO: 4 fields
-	nonce       uint32     // number of transactions created
-	balance     uint32     // number of Epfer owned
+	nonce       uint32 // number of transactions created
+	balance     uint32 // number of Epfer/Fei owned
+	storageHash string
 	storageRoot storage.KV // storage state, it is a KV
 	codeHash    string     // codeHash, only for contract account. empty for external account
 }
@@ -20,6 +21,7 @@ func NewState(kvFactory storage.KVFactory) *State {
 		codeHash: "",
 	}
 	s.storageRoot = kvFactory()
+	s.storageHash = s.storageRoot.Hash()
 	return &s
 }
 

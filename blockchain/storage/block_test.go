@@ -1,16 +1,14 @@
-package tests
+package storage
 
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"testing"
-	"time"
-
 	"github.com/stretchr/testify/require"
+	z "go.dedis.ch/cs438/internal/testing"
 	"go.dedis.ch/cs438/registry/standard"
 	"go.dedis.ch/cs438/transport/channel"
-
-	z "go.dedis.ch/cs438/internal/testing"
+	"testing"
+	"time"
 )
 
 func TestBuildFullNode(t *testing.T) {
@@ -32,12 +30,4 @@ func TestBuildFullNode(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	fullNode.Stop()
 
-}
-
-func TestNetworkInit(t *testing.T) {
-
-}
-
-func TestOneConsensus(t *testing.T) {
-	// a wallet
 }

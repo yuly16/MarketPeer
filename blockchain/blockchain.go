@@ -1,12 +1,14 @@
 package blockchain
 
 import (
+	"crypto/rsa"
 	"fmt"
 	"github.com/rs/zerolog"
 	"go.dedis.ch/cs438/blockchain/messaging"
-	miner2 "go.dedis.ch/cs438/blockchain/miner"
+	"go.dedis.ch/cs438/blockchain/miner"
+	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/blockchain/transaction"
-	wallet2 "go.dedis.ch/cs438/blockchain/wallet"
+	"go.dedis.ch/cs438/blockchain/wallet"
 	"go.dedis.ch/cs438/logging"
 )
 
@@ -15,21 +17,29 @@ import (
 type FullNodeConf struct {
 	Messaging messaging.Messager
 	Addr      string
+	// TODO: let's not worry about security at this time
+	PrivateKey rsa.PrivateKey
+	PublicKey  rsa.PublicKey
+	Bootstrap  storage.BlockChain
 }
 
 // FullNode is a Wallet as well as a Miner
 type FullNode struct {
 	logger   zerolog.Logger
 	messager messaging.Messager
-	*wallet2.Wallet
-	*miner2.Miner
+	*wallet.Wallet
+	*miner.Miner
 }
 
 // NewFullNode create a new full node, here we need to specify the transport layer
 func NewFullNode(conf *FullNodeConf) *FullNode {
-	miner := miner2.NewMiner(miner2.MinerConf{Addr: conf.Addr, Messaging: conf.Messaging})
-	wallet := wallet2.NewWallet(wallet2.WalletConf{Addr: conf.Addr, Messaging: conf.Messaging})
-	f := &FullNode{Wallet: wallet, Miner: miner, messager: conf.Messaging}
+	m := miner.NewMiner(miner.MinerConf{
+		Addr: conf.Addr, Messaging: conf.Messaging,
+		Bootstrap: conf.Bootstrap})
+	w := wallet.NewWallet(wallet.WalletConf{
+		Addr: conf.Addr, Messaging: conf.Messaging,
+		PrivateKey: conf.PrivateKey, PublicKey: conf.PublicKey})
+	f := &FullNode{Wallet: w, Miner: m, messager: conf.Messaging}
 	f.logger = logging.RootLogger.With().Str("FullNode", fmt.Sprintf("%s", conf.Addr)).Logger()
 	f.logger.Info().Msg("created")
 	return f

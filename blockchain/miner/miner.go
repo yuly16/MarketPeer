@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/rs/zerolog"
 	"go.dedis.ch/cs438/blockchain/messaging"
+	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/logging"
 )
 
@@ -11,6 +12,7 @@ import (
 type MinerConf struct {
 	Messaging messaging.Messager
 	Addr      string
+	Bootstrap storage.BlockChain
 }
 
 // Miner is a full node in Epfer network
@@ -19,12 +21,15 @@ type Miner struct {
 
 	messaging messaging.Messager
 	addr      string
+
+	chain storage.BlockChain
 }
 
 func NewMiner(conf MinerConf) *Miner {
 	m := Miner{}
 	m.messaging = conf.Messaging
 	m.addr = conf.Addr
+	m.chain = conf.Bootstrap
 	m.logger = logging.RootLogger.With().Str("Miner", fmt.Sprintf("%s", conf.Addr)).Logger()
 	m.logger.Info().Msg("created")
 	m.registerCallbacks()

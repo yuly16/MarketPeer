@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"crypto/rsa"
 	"go.dedis.ch/cs438/blockchain"
 	"go.dedis.ch/cs438/blockchain/messaging"
 	"go.dedis.ch/cs438/peer"
@@ -33,6 +34,8 @@ import (
 func buildFullNodeConf(temp *configTemplate) *blockchain.FullNodeConf {
 	conf := &blockchain.FullNodeConf{}
 	conf.Addr = temp.sock.GetAddress()
+	conf.PrivateKey = temp.privateKey
+	conf.PublicKey = temp.publicKey
 	peerMessagerConf := buildPeerNodeConf(temp)
 	conf.Messaging = messaging.NewRegistryMessager(conf.Addr, impl.NewMessager(*peerMessagerConf), temp.registry)
 	return conf
@@ -56,6 +59,19 @@ func buildPeerNodeConf(template *configTemplate) *peer.Configuration {
 	config.PaxosID = template.paxosID
 	config.PaxosProposerRetry = template.paxosProposerRetry
 	return config
+}
+
+// WithAutostart sets the autostart option.
+func WithPrivateKey(private rsa.PrivateKey) Option {
+	return func(ct *configTemplate) {
+		ct.privateKey = private
+	}
+}
+
+func WithPublicKey(public rsa.PublicKey) Option {
+	return func(ct *configTemplate) {
+		ct.publicKey = public
+	}
 }
 
 // construct a fullnode for testing purpose

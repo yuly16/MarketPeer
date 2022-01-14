@@ -2,6 +2,7 @@ package testing
 
 import (
 	"bytes"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -151,6 +152,10 @@ type configTemplate struct {
 	chordBits          uint
 	StabilizeInterval  time.Duration
 	FixFingersInterval time.Duration
+
+	// blockchain-related
+	privateKey rsa.PrivateKey
+	publicKey  rsa.PublicKey
 }
 
 func newConfigTemplate() configTemplate {
@@ -311,19 +316,18 @@ func WithChordBits(d uint) Option {
 	}
 }
 
-
 func WithStabilizeInterval(d time.Duration) Option {
 	return func(ct *configTemplate) {
 		ct.StabilizeInterval = d
 	}
 }
 
-
 func WithFixFingersInterval(d time.Duration) Option {
 	return func(ct *configTemplate) {
 		ct.FixFingersInterval = d
 	}
 }
+
 // NewTestNode returns a new test node.
 func NewTestNode(t *testing.T, f peer.Factory, trans transport.Transport,
 	addr string, opts ...Option) TestNode {
