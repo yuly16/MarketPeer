@@ -1,12 +1,14 @@
 package blockchain
 
 import (
-	"crypto/rsa"
+	"crypto/ecdsa"
 	"fmt"
 	"github.com/rs/zerolog"
+	"go.dedis.ch/cs438/blockchain/account"
 	"go.dedis.ch/cs438/blockchain/block"
 	"go.dedis.ch/cs438/blockchain/messaging"
 	"go.dedis.ch/cs438/blockchain/miner"
+	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/blockchain/transaction"
 	"go.dedis.ch/cs438/blockchain/wallet"
 	"go.dedis.ch/cs438/logging"
@@ -18,9 +20,11 @@ type FullNodeConf struct {
 	Messaging messaging.Messager
 	Addr      string
 	// TODO: let's not worry about security at this time
-	PrivateKey rsa.PrivateKey
-	PublicKey  rsa.PublicKey
-	Bootstrap  block.BlockChain
+	PrivateKey *ecdsa.PrivateKey
+	PublicKey  *ecdsa.PublicKey
+	Bootstrap  *block.BlockChain
+	KVFactory  storage.KVFactory
+	Account    *account.Account
 }
 
 // FullNode is a Wallet as well as a Miner
@@ -36,9 +40,11 @@ func NewFullNode(conf *FullNodeConf) *FullNode {
 	m := miner.NewMiner(miner.MinerConf{
 		Addr: conf.Addr, Messaging: conf.Messaging,
 		Bootstrap: conf.Bootstrap})
+
 	w := wallet.NewWallet(wallet.WalletConf{
 		Addr: conf.Addr, Messaging: conf.Messaging,
-		PrivateKey: conf.PrivateKey, PublicKey: conf.PublicKey})
+		PrivateKey: conf.PrivateKey, PublicKey: conf.PublicKey, KVFactory: conf.KVFactory, Account: conf.Account})
+
 	f := &FullNode{Wallet: w, Miner: m, messager: conf.Messaging}
 	f.logger = logging.RootLogger.With().Str("FullNode", fmt.Sprintf("%s", conf.Addr)).Logger()
 	f.logger.Info().Msg("created")

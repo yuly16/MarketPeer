@@ -11,14 +11,14 @@ func TestBlockBuilder(t *testing.T) {
 	var kvFactory storage.KVFactory = storage.CreateSimpleKV
 
 	bb := NewBlockBuilder(kvFactory).
-		setParentHash("ffff").
-		setNonce("fuck").
-		setNumber(0).
+		SetParentHash("ffff").
+		SetNonce("fuck").
+		SetNumber(0).
 		//setState(storage.NewSimpleKV()).
 		//setTxns(storage.NewSimpleKV()).
 		//setReceipts(storage.NewSimpleKV()).
-		setBeneficiary(*account.NewAddress([8]byte{}))
-	b := bb.build()
+		SetBeneficiary(*account.NewAddress([8]byte{}))
+	b := bb.Build()
 	fmt.Println(b)
 
 }
@@ -37,14 +37,14 @@ func TestBlockBuilder2(t *testing.T) {
 	state3 := account.NewStateBuilder(kvFactory).SetBalance(300).Build()
 
 	b1 := NewBlockBuilder(kvFactory).
-		setParentHash("ffff").
-		setNonce("fuck").
-		setNumber(0).
-		setAddrState(addr0, state0).
-		setAddrState(addr1, state1).
-		setAddrState(addr2, state2).
-		setAddrState(addr3, state3).
-		setBeneficiary(*account.NewAddress([8]byte{})).build()
+		SetParentHash("ffff").
+		SetNonce("fuck").
+		SetNumber(0).
+		SetAddrState(addr0, state0).
+		SetAddrState(addr1, state1).
+		SetAddrState(addr2, state2).
+		SetAddrState(addr3, state3).
+		SetBeneficiary(*account.NewAddress([8]byte{})).Build()
 	fmt.Println(b1)
 }
 
@@ -52,14 +52,14 @@ func TestBlockChainString(t *testing.T) {
 	var kvFactory storage.KVFactory = storage.CreateSimpleKV
 
 	bb := NewBlockBuilder(kvFactory).
-		setParentHash("ffff").
-		setNonce("fuck").
-		setNumber(0).
+		SetParentHash("ffff").
+		SetNonce("fuck").
+		SetNumber(0).
 		setState(storage.NewSimpleKV()).
 		setTxns(storage.NewSimpleKV()).
 		setReceipts(storage.NewSimpleKV()).
-		setBeneficiary(*account.NewAddress([8]byte{}))
-	b := bb.build()
+		SetBeneficiary(*account.NewAddress([8]byte{}))
+	b := bb.Build()
 
 	bc := NewBlockChain()
 	bc.Append(b)

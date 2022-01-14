@@ -153,6 +153,17 @@ func (m *Messager) listenDaemon() {
 func (m *Messager) Start() error {
 	m.stat = ALIVE
 	m.Info().Msg("loading daemons...")
+
+	m.msgRegistry.RegisterMessageCallback(types.RumorsMessage{}, m.RumorsMsgCallback)
+	m.Trace().Msg("register callback for `RumorsMessage`")
+	m.msgRegistry.RegisterMessageCallback(types.StatusMessage{}, m.StatusMsgCallback)
+	m.Trace().Msg("register callback for `StatusMessage`")
+	m.msgRegistry.RegisterMessageCallback(types.AckMessage{}, m.AckMsgCallback)
+	m.Trace().Msg("register callback for `AckMessage`")
+	m.msgRegistry.RegisterMessageCallback(types.EmptyMessage{}, types.EmptyMsgCallback)
+	m.Trace().Msg("register callback for `EmptyMessage`")
+	m.msgRegistry.RegisterMessageCallback(types.PrivateMessage{}, m.PrivateMsgCallback)
+	m.Trace().Msg("register callback for `PrivateMessage`")
 	go m.listenDaemon()
 	go m.statusReportDaemon(m.conf.AntiEntropyInterval)
 	go m.heartbeatDaemon(m.conf.HeartbeatInterval)

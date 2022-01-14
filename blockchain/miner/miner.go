@@ -12,7 +12,7 @@ import (
 type MinerConf struct {
 	Messaging messaging.Messager
 	Addr      string
-	Bootstrap block.BlockChain
+	Bootstrap *block.BlockChain
 }
 
 // Miner is a full node in Epfer network
@@ -22,7 +22,7 @@ type Miner struct {
 	messaging messaging.Messager
 	addr      string
 
-	chain block.BlockChain
+	chain *block.BlockChain
 }
 
 func NewMiner(conf MinerConf) *Miner {
@@ -31,7 +31,7 @@ func NewMiner(conf MinerConf) *Miner {
 	m.addr = conf.Addr
 	m.chain = conf.Bootstrap
 	m.logger = logging.RootLogger.With().Str("Miner", fmt.Sprintf("%s", conf.Addr)).Logger()
-	m.logger.Info().Msg("created")
+	m.logger.Info().Msgf("miner created:\n %s", m.chain.String())
 	m.registerCallbacks()
 	return &m
 }
