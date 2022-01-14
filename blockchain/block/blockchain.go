@@ -1,8 +1,8 @@
-package storage
+package block
 
 // BlockChain is a chain of Blocks
 type BlockChain struct {
-	blocks []*Block // lets first store it in a array
+	blocks []*Block // let's first store it in an array
 }
 
 func NewBlockChain() *BlockChain {

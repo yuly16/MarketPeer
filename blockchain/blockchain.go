@@ -4,9 +4,9 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"github.com/rs/zerolog"
+	"go.dedis.ch/cs438/blockchain/block"
 	"go.dedis.ch/cs438/blockchain/messaging"
 	"go.dedis.ch/cs438/blockchain/miner"
-	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/blockchain/transaction"
 	"go.dedis.ch/cs438/blockchain/wallet"
 	"go.dedis.ch/cs438/logging"
@@ -20,7 +20,7 @@ type FullNodeConf struct {
 	// TODO: let's not worry about security at this time
 	PrivateKey rsa.PrivateKey
 	PublicKey  rsa.PublicKey
-	Bootstrap  storage.BlockChain
+	Bootstrap  block.BlockChain
 }
 
 // FullNode is a Wallet as well as a Miner

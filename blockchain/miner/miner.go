@@ -3,8 +3,8 @@ package miner
 import (
 	"fmt"
 	"github.com/rs/zerolog"
+	"go.dedis.ch/cs438/blockchain/block"
 	"go.dedis.ch/cs438/blockchain/messaging"
-	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/logging"
 )
 
@@ -12,7 +12,7 @@ import (
 type MinerConf struct {
 	Messaging messaging.Messager
 	Addr      string
-	Bootstrap storage.BlockChain
+	Bootstrap block.BlockChain
 }
 
 // Miner is a full node in Epfer network
@@ -22,7 +22,7 @@ type Miner struct {
 	messaging messaging.Messager
 	addr      string
 
-	chain storage.BlockChain
+	chain block.BlockChain
 }
 
 func NewMiner(conf MinerConf) *Miner {

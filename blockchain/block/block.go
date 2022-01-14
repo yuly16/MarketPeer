@@ -1,10 +1,11 @@
-package storage
+package block
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"go.dedis.ch/cs438/blockchain/account"
+	"go.dedis.ch/cs438/blockchain/storage"
 	"strings"
 	"time"
 )
@@ -23,10 +24,30 @@ type BlockHeader struct {
 
 type Block struct {
 	header       BlockHeader
-	state        KV
-	transactions KV
-	receipts     KV
+	state        storage.KV
+	transactions storage.KV
+	receipts     storage.KV
 }
+
+type BlockBuilder struct {
+	parentHash string // hex form
+	nonce      string // TODO
+
+}
+
+func (bb *BlockBuilder) setParentHash(parent string) *BlockBuilder {
+	bb.parentHash = parent
+	return bb
+}
+
+func (bb *BlockBuilder) setNonce(nonce string) *BlockBuilder {
+	bb.nonce = nonce
+	return bb
+}
+
+//func (bb *BlockBuilder) build() *Block {
+//
+//}
 
 // Hash returns the hex-encoded sha256 bytes
 func (b *Block) Hash() string {
