@@ -127,6 +127,7 @@ type configTemplate struct {
 	handlers []registry.Exec
 
 	registry registry.Registry
+	sock     transport.Socket
 
 	withWatcher bool
 	autoStart   bool
@@ -212,6 +213,13 @@ func WithMessage(m types.Message, handler registry.Exec) Option {
 func WithMessageRegistry(r registry.Registry) Option {
 	return func(ct *configTemplate) {
 		ct.registry = r
+	}
+}
+
+// WithSocket sets the socket
+func WithSocket(s transport.Socket) Option {
+	return func(ct *configTemplate) {
+		ct.sock = s
 	}
 }
 
