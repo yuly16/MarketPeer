@@ -153,7 +153,10 @@ func (n *node) Start() error {
 	n.msgRegistry.RegisterMessageCallback(types.SearchReplyMessage{}, n.SearchReplyMessageCallback)
 	n.Trace().Msg("register callback for `SearchReplyMessage`")
 	// start a listining daemon to listen on the incoming message with `sock`
+
 	n.Messager.Start()
+	go n.stabilize(n.conf.StabilizeInterval)
+	go n.fixFinger(n.conf.FixFingersInterval)
 	n.Info().Msg("Start done")
 	return nil
 }
