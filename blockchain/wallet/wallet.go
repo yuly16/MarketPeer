@@ -2,7 +2,9 @@ package wallet
 
 import (
 	"crypto/ecdsa"
+	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/rs/zerolog"
@@ -85,7 +87,7 @@ func (w *Wallet) transferEpfer(dest account.Account, epfer int) {
 // transaction is signed or not?
 // how is digital coin represented?
 func (w *Wallet) submitTxn(txn transaction.Transaction) {
-	txnMessage := types.WalletTransactionMessage{Txn: txn}
+	txnMessage := types.WalletTransactionMessage{Txn: w.signTxn(txn)}
 	
 	err := w.messaging.Broadcast(txnMessage)
 	if err != nil {
@@ -93,15 +95,46 @@ func (w *Wallet) submitTxn(txn transaction.Transaction) {
 	}
 }
 
-func (w *Wallet) signTxn() {}
+func (w *Wallet) hash(data interface{}) []byte {
+	h := sha256.New()
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return nil
+	}
+	if _, err := h.Write(bytes); err != nil {
+	return nil
+	}
+	val := h.Sum(nil)
+	return val
+}
+
+func (w *Wallet) signTxn(txn transaction.Transaction) transaction.SignedTransaction {
+	signedTxn, err := transaction.NewSignedTransaction(txn, w.privateKey.PrivateKey)
+	if err != nil {
+		w.logger.Error().Msgf("sign transaction error! ")
+	}
+	return signedTxn
+	//signature, err := crypto.Sign(w.hash(txn), w.privateKey.PrivateKey)
+	//publicKey, err := crypto.Ecrecover(w.hash(txn), signature)
+	//fmt.Println(w.publicKey.bytes)
+	//fmt.Println(publicKey)
+	//ok := crypto.VerifySignature(w.publicKey.bytes, w.hash(txn), signature[:len(signature)-1])
+	////ok := ecdsa.Verify(w.publicKey.PublicKey, w.hash(txn), r, s)
+	//if err != nil {
+	//	w.logger.Error().Msgf("sign transaction fails. ")
+	//}
+	//fmt.Println(ok)
+}
 
 func (w *Wallet) registerCallbacks() {
 	w.messaging.RegisterMessageCallback(types.WalletTransactionMessage{}, w.WalletTxnMsgCallback)
+
 }
 
 //--------------The following code is just for debug -------------------//
 
 func (w *Wallet) Test_submitTxn() {
-	txn := transaction.NewTransaction()
+	txn := transaction.NewTransaction(1,2, *w.account.GetAddr(), *w.account.GetAddr())
 	w.submitTxn(txn)
 }
+

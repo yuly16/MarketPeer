@@ -6,9 +6,11 @@ import (
 )
 
 type Address struct {
-	addr [8]byte
-	hex  string
+	Addr [8]byte
+	Hex  string
 }
+
+
 
 func NewAddressFromPublicKey(pub []byte) *Address {
 	h := sha256.New()
@@ -23,10 +25,10 @@ func NewAddressFromPublicKey(pub []byte) *Address {
 }
 
 func NewAddress(addr [8]byte) *Address {
-	a := &Address{addr: addr, hex: hex.EncodeToString(addr[:])}
+	a := &Address{Addr: addr, Hex: hex.EncodeToString(addr[:])}
 	return a
 }
 
 func (a *Address) String() string {
-	return hex.EncodeToString(a.addr[:])
+	return hex.EncodeToString(a.Addr[:])
 }

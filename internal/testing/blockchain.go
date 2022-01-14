@@ -2,6 +2,7 @@ package testing
 
 import (
 	"crypto/ecdsa"
+	"github.com/ethereum/go-ethereum/crypto"
 	"go.dedis.ch/cs438/blockchain"
 	"go.dedis.ch/cs438/blockchain/account"
 	"go.dedis.ch/cs438/blockchain/block"
@@ -71,6 +72,7 @@ func WithPrivateKey(private *ecdsa.PrivateKey) Option {
 	return func(ct *configTemplate) {
 		ct.privateKey = private
 		ct.publicKey = &private.PublicKey
+		ct.acc = account.NewAccountBuilder(crypto.FromECDSAPub(ct.publicKey), storage.CreateSimpleKV).Build()
 	}
 }
 

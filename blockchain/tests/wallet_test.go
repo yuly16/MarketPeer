@@ -1,8 +1,7 @@
 package tests
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
+	"github.com/ethereum/go-ethereum/crypto"
 	"testing"
 	"time"
 
@@ -13,42 +12,48 @@ import (
 	z "go.dedis.ch/cs438/internal/testing"
 )
 
-func TestTxnSubmit(t *testing.T) {
+func TestTxnSubmitAndVerify(t *testing.T) {
 	// init some network nodes, which have some balance
 	transp := channel.NewTransport()
 	sock1, err := transp.CreateSocket("127.0.0.1:0")
 
 	require.NoError(t, err)
-	privateKey, err := rsa.GenerateKey(rand.Reader, 16)
+	privateKey1, err := crypto.GenerateKey()
 	require.NoError(t, err)
-	publicKey := privateKey.PublicKey
+
 
 	fullNode1, messager1 := z.NewTestFullNode(t,
 		z.WithSocket(sock1),
 		z.WithMessageRegistry(standard.NewRegistry()),
-		z.WithPrivateKey(*privateKey),
-		z.WithPublicKey(publicKey),
+		z.WithPrivateKey(privateKey1),
 	)
 	fullNode1.Start()
 	defer fullNode1.Stop()
+
+	require.NoError(t, err)
+	privateKey2, err := crypto.GenerateKey()
+	require.NoError(t, err)
 
 	sock2, err := transp.CreateSocket("127.0.0.1:0")
 	fullNode2, _ := z.NewTestFullNode(t,
 		z.WithSocket(sock2),
 		z.WithMessageRegistry(standard.NewRegistry()),
-		z.WithPrivateKey(*privateKey),
-		z.WithPublicKey(publicKey),
+		z.WithPrivateKey(privateKey2),
 	)
 	fullNode2.Start()
 	defer fullNode2.Stop()
+
+	
+	require.NoError(t, err)
+	privateKey3, err := crypto.GenerateKey()
+	require.NoError(t, err)
 
 	sock3, err := transp.CreateSocket("127.0.0.1:0")
 	fullNode3, _ := z.NewTestFullNode(t,
 		z.WithSocket(sock3),
 		z.WithMessageRegistry(standard.NewRegistry()),
 		z.WithHeartbeat(time.Microsecond * 500),
-		z.WithPrivateKey(*privateKey),
-		z.WithPublicKey(publicKey),
+		z.WithPrivateKey(privateKey3),
 	)
 	fullNode3.Start()
 	defer fullNode3.Stop()
@@ -58,6 +63,6 @@ func TestTxnSubmit(t *testing.T) {
 	time.Sleep(4 * time.Second)
 
 	fullNode1.Test_submitTxn()
-	time.Sleep(1000 * time.Second)
+	time.Sleep(10 * time.Second)
 }
 
