@@ -1,3 +1,5 @@
 *.DS_Store
 *go_test_many.sh
 *tester
+.idea
+.vscode

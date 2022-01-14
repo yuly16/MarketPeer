@@ -9,12 +9,13 @@ import (
 	"io"
 	"math"
 	"math/rand"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.dedis.ch/cs438/logging"
 
 	"github.com/rs/xid"
 	"github.com/rs/zerolog"
@@ -24,11 +25,7 @@ import (
 	"go.dedis.ch/cs438/types"
 )
 
-var _logger zerolog.Logger = zerolog.New(
-	zerolog.NewConsoleWriter(
-		func(w *zerolog.ConsoleWriter) { w.Out = os.Stderr },
-		func(w *zerolog.ConsoleWriter) { w.TimeFormat = "15:04:05.000" })).Level(zerolog.ErrorLevel).
-	With().Timestamp().Logger()
+var _logger zerolog.Logger = logging.RootLogger
 
 // var _peerCount int32 = -1
 var NONEIGHBOR string = "NONEIGHBOR"
@@ -94,10 +91,9 @@ type node struct {
 	msgRegistry registry.Registry
 	conf        peer.Configuration
 
-	consensus         Consensus
-	consensusCallback chan *types.PaxosValue
+	consensus Consensus
 
-	chord  *Chord
+	chord *Chord
 	// storage
 	blob   storage.Store
 	naming storage.Store
@@ -132,7 +128,6 @@ type node struct {
 	// rumors map[string][]types.Rumor // key: node_addr value: rumors in increasing order of seq
 }
 
-
 // Start implements peer.Service
 func (n *node) Start() error {
 	n.Info().Msg("Starting...")
@@ -158,14 +153,7 @@ func (n *node) Start() error {
 	n.msgRegistry.RegisterMessageCallback(types.SearchReplyMessage{}, n.SearchReplyMessageCallback)
 	n.Trace().Msg("register callback for `SearchReplyMessage`")
 	// start a listining daemon to listen on the incoming message with `sock`
-	n.Info().Msg("loading daemons...")
-	go n.listenDaemon()
-	go n.statusReportDaemon(n.conf.AntiEntropyInterval)
-	go n.heartbeatDaemon(n.conf.HeartbeatInterval)
-	go n.applyDaemon()
-	go n.stabilize(n.conf.StabilizeInterval)
-	go n.fixFinger(n.conf.FixFingersInterval)
-	n.Info().Msg("daemons loaded")
+	n.Messager.Start()
 	n.Info().Msg("Start done")
 	return nil
 }
@@ -176,6 +164,7 @@ func (n *node) Stop() error {
 	n.Info().Msg("Stoping...")
 	atomic.StoreInt32(&n.stat, KILL)
 	n.consensus.Stop()
+	n.Messager.Stop()
 	return nil
 }
 
@@ -231,7 +220,6 @@ func (n *node) PrintInfo() uint {
 
 	return n.chord.chordId
 }
-
 
 // for test
 func (n *node) GetFingerTable() []uint {
@@ -839,4 +827,3 @@ func (n *node) isKilled() bool {
 func (n *node) addr() string {
 	return n.sock.GetAddress()
 }
-

@@ -1,10 +1,12 @@
 package impl
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -14,12 +16,16 @@ import (
 	"go.dedis.ch/cs438/types"
 )
 
-// implements peer.Messaging
+// Messager implements peer.Messager
 type Messager struct {
+	peer.Messager
+
 	sock transport.Socket
 	zerolog.Logger
 	msgRegistry registry.Registry
 	conf        peer.Configuration
+
+	stat int32
 
 	// broadcast
 	acuMu      sync.Mutex
@@ -47,72 +53,188 @@ func NewMessager(conf peer.Configuration) *Messager {
 	return mess
 }
 
-func (n *Messager) addr() string {
-	return n.sock.GetAddress()
+func (m *Messager) heartbeatDaemon(interval time.Duration) {
+	if interval == 0 {
+		m.Warn().Msg("heartbeat is not activated since input interval is 0")
+		return
+	}
+
+	for !m.isKilled() {
+		m.Info().Msg("heartbeat once")
+		empty, _ := m.msgRegistry.MarshalMessage(&types.EmptyMessage{})
+		if err := m.Broadcast(empty); err != nil {
+			m.Err(err).Send()
+		}
+		time.Sleep(interval)
+	}
+}
+
+func (m *Messager) statusReportDaemon(interval time.Duration) {
+	if interval == 0 {
+		m.Warn().Msg("status report is not activated since input interval is 0")
+		return
+	}
+
+	for !m.isKilled() {
+		time.Sleep(interval)
+
+		if !m.hasNeighbor() {
+			m.Warn().Msg("no neighbor, cannot send statusMsg periodically")
+			continue
+		}
+
+		// MarshalMessage would access to the n.seqs, lock to protect
+		m.seqMu.Lock()
+		status := types.StatusMessage(m.seqs)
+		statusMsg, err := m.msgRegistry.MarshalMessage(&status)
+		m.seqMu.Unlock()
+
+		if err != nil {
+			m.Err(err).Msg("status report failed")
+			continue
+		}
+
+		randNei := m.randNeigh()
+		m.Info().Msgf("status report once to %s", randNei)
+		if err = m.Unicast(randNei, statusMsg); err != nil {
+			m.Err(err).Msg("status report failed")
+			continue
+		}
+	}
+}
+
+// TODO: make it the method of messager
+func (m *Messager) listenDaemon() {
+	// 1. must check if the message is truly for the node
+	// 	1.1 if yes, use `msgRegistry` to execute the callback associated with the message
+	//  1.2 if no, update the `RelayedBy` field of the message
+	timeout := 500 * time.Millisecond
+	// while not killed
+	for !m.isKilled() {
+		pack, err := m.sock.Recv(timeout)
+		var timeErr transport.TimeoutErr
+		// timeout error
+		if err != nil && errors.As(err, &timeErr) {
+			// continue to receive
+			m.Info().Msg("timeout, continue listening")
+			continue
+		}
+		// other types of error
+		if err != nil {
+			m.Err(err).Msg("error while listening to socket")
+			continue
+		}
+		// start processing the pack
+		m.Info().Str("pkt", pack.String()).Msg("receive packet")
+		// 0. update the routing table
+		m.addNeighbor(pack.Header.RelayedBy) // we can only ensure that relay is near us
+
+		// 1. must check if the message is truly for the node
+		// 	1.1 if yes, use `msgRegistry` to execute the callback associated with the message
+		//  1.2 if no, update the `RelayedBy` field of the message
+		if pack.Header.Destination == m.sock.GetAddress() {
+			m.Trace().Str("addr", pack.Header.Destination).Msg("addr matched between peer and sender")
+			if err := m.msgRegistry.ProcessPacket(pack); err != nil {
+				var sendErr *SenderCallbackError
+				if !errors.As(err, &sendErr) { // we only care about non-sender error
+					m.Error().Err(err).Msg("error while processing the packet")
+				}
+			}
+
+		} else {
+			m.Warn().Str("pack.addr", pack.Header.Destination).Str("this.addr", m.sock.GetAddress()).Msg("unmatched addr, set relay to my.addr and redirect the pkt")
+			pack.Header.RelayedBy = m.addr() // FIXME: not good, packet shall be immutable
+			nextDest, err := m.send(pack)
+			m.Err(err).Str("dest", pack.Header.Destination).Str("nextDest", nextDest).Str("msg", pack.Msg.String()).Str("pkt", pack.String()).Msg("relay packet")
+		}
+	}
+}
+
+func (m *Messager) Start() error {
+	m.stat = ALIVE
+	m.Info().Msg("loading daemons...")
+	go m.listenDaemon()
+	go m.statusReportDaemon(m.conf.AntiEntropyInterval)
+	go m.heartbeatDaemon(m.conf.HeartbeatInterval)
+	m.Info().Msg("daemons loaded")
+	return nil
+}
+
+func (m *Messager) Stop() error {
+	atomic.StoreInt32(&m.stat, KILL)
+	return nil
+}
+
+func (m *Messager) isKilled() bool {
+	return atomic.LoadInt32(&m.stat) == KILL
+}
+
+func (m *Messager) addr() string {
+	return m.sock.GetAddress()
 }
 
 // Note: msg_ has to be a pointer
-func (n *Messager) unicastTypesMsg(dest string, msg_ types.Message) error {
-	msg, err := n.msgRegistry.MarshalMessage(msg_)
+func (m *Messager) unicastTypesMsg(dest string, msg_ types.Message) error {
+	msg, err := m.msgRegistry.MarshalMessage(msg_)
 	if err != nil {
 		return err
 	}
-	return n.Unicast(dest, msg)
+	return m.Unicast(dest, msg)
 }
 
 // Unicast implements peer.Messaging
 // send to itself is naturally supported by UDP
-func (n *Messager) Unicast(dest string, msg transport.Message) error {
+func (m *Messager) Unicast(dest string, msg transport.Message) error {
 	// assemble a packet
 	// relay shall be self
-	relay := n.addr()
-	header := transport.NewHeader(n.addr(), relay, dest, 0)
+	relay := m.addr()
+	header := transport.NewHeader(m.addr(), relay, dest, 0)
 	pkt := transport.Packet{Header: &header, Msg: &msg}
 
-	nextDest, err := n.send(pkt)
+	nextDest, err := m.send(pkt)
 	if err != nil {
 		err = fmt.Errorf("Unicast error: %w", err)
-		n.Err(err).Send()
+		m.Err(err).Send()
 	}
-	n.Debug().Str("dest", dest).Str("nextDest", nextDest).Str("msg", msg.String()).Str("pkt", pkt.String()).Msg("unicast packet sended")
+	m.Debug().Str("dest", dest).Str("nextDest", nextDest).Str("msg", msg.String()).Str("pkt", pkt.String()).Msg("unicast packet sended")
 	return err
 }
 
 // Broadcast sends a packet to all know destinations
 // must not send the message to itself
 // but still process it
-func (n *Messager) Broadcast(msg transport.Message) error {
-	n.Debug().Msg("start to broadcast")
+func (m *Messager) Broadcast(msg transport.Message) error {
+	m.Debug().Msg("start to broadcast")
 
 	// 1. wrap a RumorMessage, and send it through the socket to one random neighbor
 	// once the seq is added and Rumor is constructed, this Rumor is gurantted to
 	// be sent(whether by broadcast or statusMsg)
 
-	n.seqMu.Lock()
+	m.seqMu.Lock()
 	// fetch my last seq and increase it
-	if _, ok := n.seqs[n.addr()]; !ok {
-		n.seqs[n.addr()] = 0
-		n.rumors[n.addr()] = []types.Rumor{}
+	if _, ok := m.seqs[m.addr()]; !ok {
+		m.seqs[m.addr()] = 0
+		m.rumors[m.addr()] = []types.Rumor{}
 	}
-	seq := n.seqs[n.addr()] + 1
-	n.seqs[n.addr()] = seq
+	seq := m.seqs[m.addr()] + 1
+	m.seqs[m.addr()] = seq
 
 	// update rumors
-	ru := types.Rumor{Origin: n.addr(), Msg: &msg, Sequence: uint(seq)}
-	n.rumors[n.addr()] = append(n.rumors[n.addr()], ru)
-	n.Debug().Str("seqs", fmt.Sprintf("%v", n.seqs)).Str("rumors", fmt.Sprintf("%v", n.rumors)).Msg("update seqs and rumors first")
-	n.seqMu.Unlock()
+	ru := types.Rumor{Origin: m.addr(), Msg: &msg, Sequence: uint(seq)}
+	m.rumors[m.addr()] = append(m.rumors[m.addr()], ru)
+	m.Debug().Str("seqs", fmt.Sprintf("%v", m.seqs)).Str("rumors", fmt.Sprintf("%v", m.rumors)).Msg("update seqs and rumors first")
+	m.seqMu.Unlock()
 
-	ruMsg, err := n.msgRegistry.MarshalMessage(&types.RumorsMessage{Rumors: []types.Rumor{ru}})
+	ruMsg, err := m.msgRegistry.MarshalMessage(&types.RumorsMessage{Rumors: []types.Rumor{ru}})
 	if err != nil {
-		n.Err(err).Send()
+		m.Err(err).Send()
 		return fmt.Errorf("Broadcast error: %w", err)
 	}
 
 	// send and wait for the ack
 	go func() {
-		if !n.hasNeighbor() {
-			n.Warn().Msg("no neighbor, cannot broadcast, direct return")
+		if !m.hasNeighbor() {
+			m.Warn().Msg("no neighbor, cannot broadcast, direct return")
 		}
 		preNei := ""
 		tried := 0
@@ -122,44 +244,44 @@ func (n *Messager) Broadcast(msg transport.Message) error {
 			tried++
 			// ensure the randNeigh is not previous one
 			// if has only one neighbor, then randNeighExcept will return this only neighbor
-			randNei := n.randNeighExcept(preNei)
-			header := transport.NewHeader(n.addr(), n.addr(), randNei, 0)
+			randNei := m.randNeighExcept(preNei)
+			header := transport.NewHeader(m.addr(), m.addr(), randNei, 0)
 			pkt := transport.Packet{Header: &header, Msg: &ruMsg}
 			preNei = randNei
 			// create and register the future before send, such that AckCallback will always happens after future register
 			// create ack future, it is a buffered channel, such that ack after timeout do not block on sending on future
 			future := make(chan int, 1)
-			n.acuMu.Lock()
-			n.ackFutures[pkt.Header.PacketID] = future
-			n.Debug().Msgf("broadcast register a future for packet %s", pkt.Header.PacketID)
-			n.acuMu.Unlock()
+			m.acuMu.Lock()
+			m.ackFutures[pkt.Header.PacketID] = future
+			m.Debug().Msgf("broadcast register a future for packet %s", pkt.Header.PacketID)
+			m.acuMu.Unlock()
 
-			n.Debug().Msgf("broadcast prepares to send pkt to %s", randNei)
-			nextDest, err := n.send(pkt)
+			m.Debug().Msgf("broadcast prepares to send pkt to %s", randNei)
+			nextDest, err := m.send(pkt)
 			if !processed {
 				processed = true
 				// 0. process the embeded message
-				_header := transport.NewHeader(n.addr(), n.addr(), n.addr(), 0)
-				err = n.msgRegistry.ProcessPacket(transport.Packet{
+				_header := transport.NewHeader(m.addr(), m.addr(), m.addr(), 0)
+				err = m.msgRegistry.ProcessPacket(transport.Packet{
 					Header: &_header,
 					Msg:    &msg,
 				})
 				if err != nil {
-					n.Err(fmt.Errorf("Broadcast process local error: %w", err)).Send()
+					m.Err(fmt.Errorf("Broadcast process local error: %w", err)).Send()
 					// return fmt.Errorf("Broadcast error: %w", err)
 				}
-				n.Debug().Msg("process Broad Msg done")
+				m.Debug().Msg("process Broad Msg done")
 			}
 			if err != nil {
-				n.Err(fmt.Errorf("Broadcast error: %w", err)).Send()
+				m.Err(fmt.Errorf("Broadcast error: %w", err)).Send()
 				// FIXME: this early return did not delete entries
 				return
 			}
-			n.Debug().Str("dest", header.Destination).Str("nextDest", nextDest).Str("msg", ruMsg.String()).Str("pkt", pkt.String()).Msg("possibly sended")
+			m.Debug().Str("dest", header.Destination).Str("nextDest", nextDest).Str("msg", ruMsg.String()).Str("pkt", pkt.String()).Msg("possibly sended")
 
 			// start to wait for the ack message
-			n.Debug().Msgf("start to wait for broadcast ack message on packet %s", pkt.Header.PacketID)
-			timeout := n.conf.AckTimeout
+			m.Debug().Msgf("start to wait for broadcast ack message on packet %s", pkt.Header.PacketID)
+			timeout := m.conf.AckTimeout
 			if timeout == 0 {
 				timeout = time.Duration(math.MaxInt32 * time.Millisecond)
 			}
@@ -167,15 +289,15 @@ func (n *Messager) Broadcast(msg transport.Message) error {
 			select {
 			case <-future:
 				acked = true
-				n.Debug().Msgf("ack received and properly processed")
+				m.Debug().Msgf("ack received and properly processed")
 			case <-timer:
-				n.Debug().Msgf("ack timeout, start another probe")
+				m.Debug().Msgf("ack timeout, start another probe")
 				// send to another random neighbor
 			}
 			// delete unused future
-			n.acuMu.Lock()
-			delete(n.ackFutures, pkt.Header.PacketID)
-			n.acuMu.Unlock()
+			m.acuMu.Lock()
+			delete(m.ackFutures, pkt.Header.PacketID)
+			m.acuMu.Unlock()
 		}
 
 	}()
@@ -185,35 +307,35 @@ func (n *Messager) Broadcast(msg transport.Message) error {
 
 // Unicast implements peer.Messaging
 // send to itself is naturally supported by UDP
-func (n *Messager) strictUnicast(dest string, msg transport.Message) error {
+func (m *Messager) strictUnicast(dest string, msg transport.Message) error {
 	// assemble a packet
 	// relay shall be self
-	relay := n.addr()
-	header := transport.NewHeader(n.addr(), relay, dest, 0)
+	relay := m.addr()
+	header := transport.NewHeader(m.addr(), relay, dest, 0)
 	pkt := transport.Packet{Header: &header, Msg: &msg}
 
-	nextDest, err := n.strictSend(pkt)
+	nextDest, err := m.strictSend(pkt)
 	if err != nil {
 		err = fmt.Errorf("strictUnicast error: %w", err)
-		n.Err(err).Send()
+		m.Err(err).Send()
 	}
-	n.Debug().Str("dest", dest).Str("nextDest", nextDest).Str("msg", msg.String()).Str("pkt", pkt.String()).Msg("unicast packet sended")
+	m.Debug().Str("dest", dest).Str("nextDest", nextDest).Str("msg", msg.String()).Str("pkt", pkt.String()).Msg("unicast packet sended")
 	return err
 }
 
 // blocking send a packet, target is decided by the routing table
 // return `nextDest` and error
-func (n *Messager) strictSend(pkt transport.Packet) (string, error) {
+func (m *Messager) strictSend(pkt transport.Packet) (string, error) {
 	// 1. source should not be changed
 	// 2. relay=me
 	// 3. dest should de decided by the routing table
-	nextDest, err := n.strictNextHop(pkt.Header.Destination)
+	nextDest, err := m.strictNextHop(pkt.Header.Destination)
 	if err != nil {
 		return nextDest, fmt.Errorf("send error: %w", err)
 	}
 
 	// send the pkt
-	err = n.sock.Send(nextDest, pkt, 0)
+	err = m.sock.Send(nextDest, pkt, 0)
 	if err != nil {
 		return nextDest, fmt.Errorf("send error: %w", err)
 	}
@@ -221,23 +343,23 @@ func (n *Messager) strictSend(pkt transport.Packet) (string, error) {
 }
 
 // strictNextHop will not care about neighbors
-func (n *Messager) strictNextHop(dest string) (string, error) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
+func (m *Messager) strictNextHop(dest string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	// dest must be known
-	nextDest, ok := n.route[dest]
+	nextDest, ok := m.route[dest]
 	var err error
 	if !ok {
-		err = fmt.Errorf("dest=%s is unknown to me=%s", dest, n.addr())
+		err = fmt.Errorf("dest=%s is unknown to me=%s", dest, m.addr())
 	}
 	return nextDest, err
 }
 
 // no need to check routing table
-func (n *Messager) forceSend(peer string, pkt transport.Packet) error {
+func (m *Messager) forceSend(peer string, pkt transport.Packet) error {
 	// send the pkt
-	err := n.sock.Send(peer, pkt, 0)
+	err := m.sock.Send(peer, pkt, 0)
 	if err != nil {
 		return err
 	}
@@ -246,137 +368,137 @@ func (n *Messager) forceSend(peer string, pkt transport.Packet) error {
 
 // blocking send a packet, target is decided by the routing table
 // return `nextDest` and error
-func (n *Messager) send(pkt transport.Packet) (string, error) {
+func (m *Messager) send(pkt transport.Packet) (string, error) {
 	// 1. source should not be changed
 	// 2. relay=me
 	// 3. dest should de decided by the routing table
-	nextDest, err := n.nextHop(pkt.Header.Destination)
+	nextDest, err := m.nextHop(pkt.Header.Destination)
 	if err != nil {
 		return nextDest, fmt.Errorf("send error: %w", err)
 	}
 	// send the packet
-	err = n.forceSend(nextDest, pkt)
+	err = m.forceSend(nextDest, pkt)
 	if err != nil {
 		return nextDest, fmt.Errorf("send error: %w", err)
 	}
 	return nextDest, nil
 }
 
-func (n *Messager) nextHop(dest string) (string, error) {
-	if n.isNeighbor(dest) {
+func (m *Messager) nextHop(dest string) (string, error) {
+	if m.isNeighbor(dest) {
 		return dest, nil
 	}
 
-	n.mu.Lock()
-	defer n.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	// dest must be known
-	nextDest, ok := n.route[dest]
+	nextDest, ok := m.route[dest]
 	var err error
 	if !ok {
-		err = fmt.Errorf("dest=%s is unknown to me=%s", dest, n.addr())
+		err = fmt.Errorf("dest=%s is unknown to me=%s", dest, m.addr())
 	}
 	return nextDest, err
 }
 
 // AddPeer implements peer.Service
-func (n *Messager) AddPeer(addr ...string) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
+func (m *Messager) AddPeer(addr ...string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	// we could directly reach the peers
 	// NOTE: adding ourselves should have no effects
-	n.Info().Strs("peers", addr).Msg("adding peers")
+	m.Info().Strs("peers", addr).Msg("adding peers")
 	for i := 0; i < len(addr); i++ {
-		n.route[addr[i]] = addr[i]
-		if _, ok := n.neighborSet[addr[i]]; !ok && addr[i] != n.addr() {
-			n.neighborSet[addr[i]] = struct{}{}
-			n.neighbors = append(n.neighbors, addr[i])
+		m.route[addr[i]] = addr[i]
+		if _, ok := m.neighborSet[addr[i]]; !ok && addr[i] != m.addr() {
+			m.neighborSet[addr[i]] = struct{}{}
+			m.neighbors = append(m.neighbors, addr[i])
 		}
 
 	}
-	n.Trace().Str("route", n.route.String()).Str("neighbors", fmt.Sprintf("%v", n.neighbors)).Msg("after added")
+	m.Trace().Str("route", m.route.String()).Str("neighbors", fmt.Sprintf("%v", m.neighbors)).Msg("after added")
 }
 
-func (n *Messager) addNeighbor(addr ...string) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
+func (m *Messager) addNeighbor(addr ...string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	// we could directly reach the peers
 	// NOTE: adding ourselves should have no effects
-	n.Trace().Strs("peers", addr).Msg("adding neis")
+	m.Trace().Strs("peers", addr).Msg("adding neis")
 	for i := 0; i < len(addr); i++ {
-		if _, ok := n.neighborSet[addr[i]]; !ok && addr[i] != n.addr() {
-			n.neighborSet[addr[i]] = struct{}{}
-			n.neighbors = append(n.neighbors, addr[i])
+		if _, ok := m.neighborSet[addr[i]]; !ok && addr[i] != m.addr() {
+			m.neighborSet[addr[i]] = struct{}{}
+			m.neighbors = append(m.neighbors, addr[i])
 		}
 
 	}
-	n.Trace().Str("neighbors", fmt.Sprintf("%v", n.neighbors)).Msg("after neighbor added")
+	m.Trace().Str("neighbors", fmt.Sprintf("%v", m.neighbors)).Msg("after neighbor added")
 }
 
 // GetRoutingTable implements peer.Service
-func (n *Messager) GetRoutingTable() peer.RoutingTable {
-	n.mu.Lock()
-	defer n.mu.Unlock()
+func (m *Messager) GetRoutingTable() peer.RoutingTable {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	copy := make(map[string]string)
-	for k, v := range n.route {
+	for k, v := range m.route {
 		copy[k] = v
 	}
 	return copy
 }
 
 // SetRoutingEntry implements peer.Service
-func (n *Messager) SetRoutingEntry(origin, relayAddr string) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
+func (m *Messager) SetRoutingEntry(origin, relayAddr string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	// If relayAddr is empty then the record must be deleted
 	if relayAddr == "" {
-		delete(n.route, origin)
+		delete(m.route, origin)
 	} else {
 		// simply overwrite
-		n.route[origin] = relayAddr
+		m.route[origin] = relayAddr
 	}
-	n.Info().Str("origin", origin).Str("relay", relayAddr).Msg("set routing entry")
-	n.Debug().Str("route", n.route.String()).Msg("routing table after set")
+	m.Info().Str("origin", origin).Str("relay", relayAddr).Msg("set routing entry")
+	m.Debug().Str("route", m.route.String()).Msg("routing table after set")
 }
 
 // neighbors access shall be protected,
 // FIXME: shall it share the same lock with routeMutex?
-func (n *Messager) randNeigh() string {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if len(n.neighbors) == 0 {
+func (m *Messager) randNeigh() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.neighbors) == 0 {
 		return NONEIGHBOR
 	}
-	return n.neighbors[rand.Int31n(int32(len(n.neighbors)))]
+	return m.neighbors[rand.Int31n(int32(len(m.neighbors)))]
 }
 
 // Q: what if we only have one random neighbor? A: just return it
-func (n *Messager) randNeighExcept(except string) string {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if len(n.neighbors) == 0 {
+func (m *Messager) randNeighExcept(except string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.neighbors) == 0 {
 		return NONEIGHBOR
 	}
-	if len(n.neighbors) == 1 {
-		return n.neighbors[0]
+	if len(m.neighbors) == 1 {
+		return m.neighbors[0]
 	}
-	randN := n.neighbors[rand.Int31n(int32(len(n.neighbors)))]
+	randN := m.neighbors[rand.Int31n(int32(len(m.neighbors)))]
 	for randN == except {
-		randN = n.neighbors[rand.Int31n(int32(len(n.neighbors)))]
+		randN = m.neighbors[rand.Int31n(int32(len(m.neighbors)))]
 	}
 	return randN
 }
 
-func (n *Messager) hasNeighbor() bool {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	return len(n.neighbors) != 0
+func (m *Messager) hasNeighbor() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.neighbors) != 0
 }
 
-func (n *Messager) isNeighbor(addr string) bool {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	for _, nei := range n.neighbors {
+func (m *Messager) isNeighbor(addr string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, nei := range m.neighbors {
 		if nei == addr {
 			return true
 		}
@@ -384,11 +506,11 @@ func (n *Messager) isNeighbor(addr string) bool {
 	return false
 }
 
-func (n *Messager) getNeisExcept(excepts ...string) []string {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	ret := make([]string, 0, len(n.neighbors))
-	for _, nei := range n.neighbors {
+func (m *Messager) getNeisExcept(excepts ...string) []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ret := make([]string, 0, len(m.neighbors))
+	for _, nei := range m.neighbors {
 		filtered := false
 		for _, except := range excepts {
 			if except == nei {
@@ -403,6 +525,6 @@ func (n *Messager) getNeisExcept(excepts ...string) []string {
 	return ret
 }
 
-func (n *Messager) getNeis() []string {
-	return n.getNeisExcept(NONEIGHBOR)
+func (m *Messager) getNeis() []string {
+	return m.getNeisExcept(NONEIGHBOR)
 }

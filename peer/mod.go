@@ -9,11 +9,18 @@ import (
 	"go.dedis.ch/cs438/transport"
 )
 
+// Messager is resiponsible for send messages as well as listen on received messages
+// 			since it needs to listen, so it is also a Service
+// 			it could be seen as a light Peer. Since we dont need DataSharing.
+type Messager interface {
+	Service
+	Messaging
+}
+
 // Peer defines the interface of a peer in the Peerster system. It embeds all
 // the interfaces that will have to be implemented.
 type Peer interface {
-	Service
-	Messaging
+	Messager
 	DataSharing
 }
 
