@@ -1,8 +1,9 @@
 package logging
 
 import (
-	"github.com/rs/zerolog"
 	"os"
+
+	"github.com/rs/zerolog"
 )
 
 var RootLogger zerolog.Logger = zerolog.New(
