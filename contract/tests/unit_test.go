@@ -1,7 +1,8 @@
 package tests
 
 import (
-	// "fmt"
+	"fmt"
+	// "reflect"
 	// "encoding/json"
 	// "errors"
 	// "time"
@@ -9,7 +10,8 @@ import (
 	"github.com/alecthomas/participle/v2"
 	"testing"
 	"github.com/stretchr/testify/require"
-	impl "go.dedis.ch/cs438/contract/impl"
+	// "go.dedis.ch/cs438/contract"
+	"go.dedis.ch/cs438/contract/impl"
 )
 
 // Unit tests of the Smart contract functionalities
@@ -455,12 +457,66 @@ func Test_Parser_Case(t *testing.T) {
 
 // Marshal and Unmarshal the contract instance
 func Test_Contract_Marshal(t *testing.T) {
-	// create a contract instance
 	
+	contract_code := 
+	`
+		ASSUME seller.balance > 100
+		ASSUME seller.product.amount != 0
+		IF buyer.balance > 10.5 THEN
+		 	buyer.transfer("seller_id", 1.25)
+			seller.send("seller_id", "product_id", 50)
+	`
+	
+	// create a contract instance
+	contract_inst := impl.NewContract(
+		"1", // contract_id
+		"Two-party commodity purchase contract", // contract_name
+		contract_code, // plain_code
+		"127.0.0.1", // proposer_addr
+		"00000001", // proposer_account
+		"127.0.0.2", // acceptor_addr
+		"00000002", // acceptor_account
+	)
 
-
+	// marshal & unmarshal reverse check
+	fmt.Println(contract_inst.String())
+	buf, err := contract_inst.Marshal()
+	require.NoError(t, err)
+	
+	var contract_unmarshal impl.Contract
+	err = impl.Unmarshal(buf, &contract_unmarshal)
+	require.NoError(t, err)
+	fmt.Println(contract_unmarshal.String())
+	
 }
 
+func Test_Debug(t *testing.T) {
 
+	contract_code := 
+	`
+		ASSUME seller.balance > 100
+		ASSUME seller.product.amount != 0
+		IF buyer.balance > 10.5 THEN
+		 	buyer.transfer("seller_id", 1.25)
+			seller.send("seller_id", "product_id", 50)
+	`
+
+	// create a contract instance
+	contract_inst := impl.NewContract(
+		"1", // contract_id
+		"Two-party commodity purchase contract", // contract_name
+		contract_code, // plain_code
+		"127.0.0.1", // proposer_addr
+		"00000001", // proposer_account
+		"127.0.0.2", // acceptor_addr
+		"00000002", // acceptor_account
+	)
+
+	code_ast, err := impl.Parse(contract_code)
+	require.NoError(t, err)
+
+	fmt.Println(contract_inst.String())
+	fmt.Println(impl.DisplayAST(code_ast))
+}
 
 
