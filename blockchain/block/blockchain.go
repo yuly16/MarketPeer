@@ -14,7 +14,7 @@ func NewBlockChain() *BlockChain {
 }
 
 func NewBlockChainWithGenesis(genesis *Block) *BlockChain {
-	return &BlockChain{blocks: []*Block{genesis}, latestState: genesis.state.Copy()}
+	return &BlockChain{blocks: []*Block{genesis}, latestState: genesis.State.Copy()}
 }
 
 // LatestWorldState returns a copy of the world state stored in the last block
@@ -30,7 +30,7 @@ func (bc *BlockChain) lastBlock() *Block {
 
 func (bc *BlockChain) Append(block *Block) error {
 	bc.blocks = append(bc.blocks, block)
-	bc.latestState = block.state.Copy()
+	bc.latestState = block.State.Copy()
 	return nil
 }
 

@@ -36,6 +36,29 @@ type BlockHeader struct {
 	ReceiptsHash     string
 }
 
+func (bh *BlockHeader) hash() []byte {
+	var err error = nil
+	h := sha256.New()
+	writeOnce := func(raw []byte) {
+		if err != nil {
+			return
+		}
+		_, err = h.Write(raw)
+	}
+	writeOnce([]byte(bh.ParentHash))
+	writeOnce([]byte(bh.Nonce))
+	writeOnce([]byte(fmt.Sprintf("%d", bh.Timestamp)))
+	writeOnce([]byte(bh.Beneficiary.String()))
+	writeOnce([]byte(fmt.Sprintf("%d", bh.Number)))
+	writeOnce([]byte(bh.StateHash))
+	writeOnce([]byte(bh.TransactionsHash))
+	writeOnce([]byte(bh.ReceiptsHash))
+	if err != nil {
+		panic(err)
+	}
+	return h.Sum(nil)
+}
+
 type Block struct {
 	Header       BlockHeader
 	State        storage.KV // addr -> addr_state. addr_state is json_marshaled
@@ -142,9 +165,19 @@ func (bb *BlockBuilder) Build() *Block {
 
 // Hash returns the hex-encoded sha256 bytes
 func (b *Block) Hash() string {
-	raw := []byte(fmt.Sprintf(""))
+	var err error = nil
 	h := sha256.New()
-	_, err := h.Write(raw)
+	writeOnce := func(raw []byte) {
+		if err != nil {
+			return
+		}
+		_, err = h.Write(raw)
+	}
+	headerHash := b.Header.hash()
+	writeOnce(headerHash)
+	writeOnce([]byte(b.State.Hash()))
+	writeOnce([]byte(b.Transactions.Hash()))
+	writeOnce([]byte(b.Receipts.Hash()))
 	if err != nil {
 		panic(err)
 	}
