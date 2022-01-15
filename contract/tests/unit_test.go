@@ -490,7 +490,8 @@ func Test_Contract_Marshal(t *testing.T) {
 	
 }
 
-func Test_Debug(t *testing.T) {
+// Test state tree by printing out AST and State AST
+func Test_Contract_State_Tree(t *testing.T) {
 
 	contract_code := 
 	`
@@ -513,10 +514,14 @@ func Test_Debug(t *testing.T) {
 	)
 
 	code_ast, err := impl.Parse(contract_code)
+	state_ast := impl.ConstructStateTree(&code_ast)
 	require.NoError(t, err)
 
 	fmt.Println(contract_inst.String())
 	fmt.Println(impl.DisplayAST(code_ast))
+	fmt.Println(impl.DisplayStateAST(code_ast, state_ast))
 }
+
+
 
 
