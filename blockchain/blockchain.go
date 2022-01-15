@@ -12,11 +12,13 @@ import (
 	"go.dedis.ch/cs438/blockchain/transaction"
 	"go.dedis.ch/cs438/blockchain/wallet"
 	"go.dedis.ch/cs438/logging"
+	"go.dedis.ch/cs438/peer"
 )
 
 // FIXME: it might will expose to the outside world
 
 type FullNodeConf struct {
+	PeerMessager peer.Messager
 	Messaging messaging.Messager
 	Addr      string
 	// TODO: let's not worry about security at this time

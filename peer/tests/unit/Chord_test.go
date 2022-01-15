@@ -27,7 +27,7 @@ func Test_Chord_twoPeers_createSystem(t *testing.T) {
 	// initialize routing table
 	node1.AddPeer(node2.GetAddr())
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(4 * time.Second)
 	node1.Init(node2.GetAddr())
 	node2.Init(node1.GetAddr())
 	time.Sleep(600 * time.Second)

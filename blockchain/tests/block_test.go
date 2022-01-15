@@ -121,14 +121,14 @@ func TestBlockHash(t *testing.T) {
 }
 
 func TestBlockMarshal(t *testing.T) {
-	genesis := DefaultGenesis()
+	genesis := block.DefaultGenesis()
 	fmt.Println(genesis.String(), genesis.Hash())
 
 	v, err := json.Marshal(genesis)
 	fmt.Println(string(v))
 	require.NoError(t, err)
 	//unmarshaled := &Block{}
-	unmarshaled := NewBlockBuilder(storage.CreateSimpleKV).Build()
+	unmarshaled := block.NewBlockBuilder(storage.CreateSimpleKV).Build()
 	json.Unmarshal(v, unmarshaled)
 	//fmt.Println(unmarshaled.String(), unmarshaled.Hash())
 

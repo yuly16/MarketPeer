@@ -10,6 +10,7 @@ import (
 	"go.dedis.ch/cs438/types"
 	"math/big"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -67,6 +68,8 @@ type Chord struct {
 	fingerTable         *FingerTable
 
 	blockStore          ChordStorage
+
+	stat                int32
 }
 
 //The identifier length m must
@@ -294,4 +297,28 @@ func (c *Chord) GetSuccessor() string {
 // just for test
 func (c *Chord) GetFingerTableItem(i int) (string, error) {
 	return c.fingerTable.load(i)
+}
+
+func (c *Chord) GetFingerTable() []uint {
+	res := make([]uint, c.conf.ChordBits)
+	for i := 0; i < int(c.conf.ChordBits); i++ {
+		str, _ := c.GetFingerTableItem(i)
+		res[i] = c.HashKey(str)
+	}
+	return res
+}
+
+
+func (c *Chord) isKilled() bool {
+	return atomic.LoadInt32(&c.stat) == KILL
+}
+
+func (c *Chord) Stop() {
+	atomic.StoreInt32(&c.stat, KILL)
+}
+
+func (c *Chord) Start() {
+	go c.stabilizeDaemon(c.conf.StabilizeInterval)
+	go c.fixFingerDaemon(c.conf.FixFingersInterval)
+	atomic.StoreInt32(&c.stat, ALIVE)
 }
