@@ -87,7 +87,8 @@ func WithAccount(acc *account.Account) Option {
 
 func WithGenesisBlock(genesis *block.Block) Option {
 	return func(ct *configTemplate) {
-		ct.blockchain.Append(genesis)
+		ct.genesisBlock = genesis
+		ct.blockchain = block.NewBlockChainWithGenesis(genesis)
 	}
 }
 

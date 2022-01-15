@@ -12,6 +12,7 @@ type KV interface {
 	Get(key string) (interface{}, error)
 	Put(key string, value interface{}) error
 	Del(key string) error
+	Copy() KV
 	Hash() string
 }
 
