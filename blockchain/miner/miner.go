@@ -77,8 +77,6 @@ func (m *Miner) isKilled() bool {
 	return atomic.LoadInt32(&m.stat) == KILL
 }
 
-func (m *Miner) verifyTxn() {}
-
 func (m *Miner) submitBlock() {}
 
 func (m *Miner) registerCallbacks() {}

@@ -10,8 +10,6 @@ type Address struct {
 	Hex  string
 }
 
-
-
 func NewAddressFromPublicKey(pub []byte) *Address {
 	h := sha256.New()
 	_, err := h.Write(pub)
@@ -31,4 +29,8 @@ func NewAddress(addr [8]byte) *Address {
 
 func (a *Address) String() string {
 	return hex.EncodeToString(a.Addr[:])
+}
+
+func (a *Address) Equal(other *Address) bool {
+	return a.Hex == other.Hex
 }

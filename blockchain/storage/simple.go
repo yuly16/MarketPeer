@@ -38,6 +38,19 @@ func (skv *SimpleKV) Del(key string) error {
 	return nil
 }
 
+func (skv *SimpleKV) Copy() KV {
+	serialized, err := json.Marshal(skv)
+	if err != nil {
+		panic(err)
+	}
+	var ret *SimpleKV = &SimpleKV{}
+	err = json.Unmarshal(serialized, ret)
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
 func (skv *SimpleKV) String() string {
 	ret := "{"
 	for key, value := range skv.kv {

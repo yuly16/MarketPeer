@@ -157,12 +157,13 @@ type configTemplate struct {
 	FixFingersInterval time.Duration
 
 	// blockchain-related
-	privateKey *ecdsa.PrivateKey
-	publicKey  *ecdsa.PublicKey
-	blockchain *block.BlockChain
-	kvFactory  chainStorage.KVFactory
-	acc        *account.Account // TODO: update WalletConf directly with Account
-	blocktxns  int              // how many transactions in a block
+	privateKey   *ecdsa.PrivateKey
+	publicKey    *ecdsa.PublicKey
+	blockchain   *block.BlockChain
+	genesisBlock *block.Block
+	kvFactory    chainStorage.KVFactory
+	acc          *account.Account // TODO: update WalletConf directly with Account
+	blocktxns    int              // how many transactions in a block
 }
 
 func newConfigTemplate() configTemplate {
@@ -201,9 +202,10 @@ func newConfigTemplate() configTemplate {
 		StabilizeInterval:  time.Second * 5,
 		FixFingersInterval: time.Second * 5,
 
-		blockchain: block.NewBlockChain(),
-		kvFactory:  chainStorage.CreateSimpleKV,
-		blocktxns:  1,
+		blockchain:   block.NewBlockChain(),
+		genesisBlock: block.DefaultGenesis(),
+		kvFactory:    chainStorage.CreateSimpleKV,
+		blocktxns:    1,
 	}
 }
 

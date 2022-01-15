@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-
 func TestBlockBuilder(t *testing.T) {
 	var kvFactory storage.KVFactory = storage.CreateSimpleKV
 	bb := NewBlockBuilder(kvFactory).
@@ -68,6 +67,7 @@ func TestBlockChainString(t *testing.T) {
 	fmt.Println(bc)
 }
 
+
 func TestBlockChainVerify(t *testing.T) {
 	var kvFactory storage.KVFactory = storage.CreateSimpleKV
 
@@ -87,3 +87,11 @@ func TestBlockChainVerify(t *testing.T) {
 	bc.Append(b)
 	fmt.Println(bc)
 }
+
+func TestBlockHash(t *testing.T) {
+	genesis := DefaultGenesis()
+	fmt.Println(genesis.Hash())
+	next := NewBlockBuilder(storage.CreateSimpleKV).SetParentHash(genesis.Hash()).Build()
+	fmt.Println(next.Hash())
+}
+
