@@ -6,34 +6,69 @@ import (
 	"fmt"
 	"go.dedis.ch/cs438/blockchain/account"
 	"go.dedis.ch/cs438/blockchain/storage"
+	"go.dedis.ch/cs438/blockchain/transaction"
 	"strings"
 	"time"
 )
 
 var DUMMY_PARENT_HASH string = strings.Repeat("0", 64)
+var GENESIS_DIFFICULTY int = 233
+var GENESIS_NONCE uint32 = 0
+var GENESIS_BENEFICIARY *account.Address = account.NewAddress([8]byte{})
+
+// DefaultGenesis returns the default genesis block
+func DefaultGenesis() *Block {
+	bb := NewBlockBuilder(storage.CreateSimpleKV)
+	bb.SetParentHash(DUMMY_PARENT_HASH).setDifficulty(GENESIS_DIFFICULTY).
+		SetNonce(GENESIS_NONCE).setTimeStamp(0).SetBeneficiary(*GENESIS_BENEFICIARY).SetNumber(0)
+	return bb.Build()
+}
 
 type BlockHeader struct {
-	parentHash       string // hex form
-	nonce            string // TODO
-	timestamp        int64  // unix millseconds
-	beneficiary      account.Address
-	difficulty       int
-	number           int
-	stateHash        string
-	transactionsHash string
-	receiptsHash     string
+	ParentHash       string // hex form
+	Nonce            uint32 // TODO
+	Timestamp        int64  // unix millseconds
+	Beneficiary      account.Address
+	Difficulty       int
+	Number           int
+	StateHash        string
+	TransactionsHash string
+	ReceiptsHash     string
+}
+
+func (bh *BlockHeader) hash() []byte {
+	var err error = nil
+	h := sha256.New()
+	writeOnce := func(raw []byte) {
+		if err != nil {
+			return
+		}
+		_, err = h.Write(raw)
+	}
+	writeOnce([]byte(bh.ParentHash))
+	writeOnce([]byte(fmt.Sprintf("%d", bh.Nonce)))
+	writeOnce([]byte(fmt.Sprintf("%d", bh.Timestamp)))
+	writeOnce([]byte(bh.Beneficiary.String()))
+	writeOnce([]byte(fmt.Sprintf("%d", bh.Number)))
+	writeOnce([]byte(bh.StateHash))
+	writeOnce([]byte(bh.TransactionsHash))
+	writeOnce([]byte(bh.ReceiptsHash))
+	if err != nil {
+		panic(err)
+	}
+	return h.Sum(nil)
 }
 
 type Block struct {
-	header       BlockHeader
-	state        storage.KV // addr -> addr_state. addr_state is json_marshaled
-	transactions storage.KV
-	receipts     storage.KV
+	Header       BlockHeader
+	State        storage.KV // addr -> addr_state. addr_state is json_marshaled
+	Transactions storage.KV
+	Receipts     storage.KV
 }
 
 type BlockBuilder struct {
 	parentHash   string // hex form
-	nonce        string // TODO
+	nonce        uint32 // TODO
 	timestamp    int64  // unix millseconds
 	beneficiary  account.Address
 	difficulty   int
@@ -52,7 +87,7 @@ func (bb *BlockBuilder) SetParentHash(parent string) *BlockBuilder {
 	return bb
 }
 
-func (bb *BlockBuilder) SetNonce(nonce string) *BlockBuilder {
+func (bb *BlockBuilder) SetNonce(nonce uint32) *BlockBuilder {
 	bb.nonce = nonce
 	return bb
 }
@@ -90,6 +125,13 @@ func (bb *BlockBuilder) SetAddrState(addr *account.Address, s *account.State) *B
 	return bb
 }
 
+func (bb *BlockBuilder) AddTxn(txn *transaction.SignedTransaction) *BlockBuilder {
+	if err := bb.transactions.Put(hex.EncodeToString(txn.Digest), txn); err != nil {
+		panic(err)
+	}
+	return bb
+}
+
 func (bb *BlockBuilder) setTxns(txns storage.KV) *BlockBuilder {
 	bb.transactions = txns
 	return bb
@@ -102,30 +144,40 @@ func (bb *BlockBuilder) setReceipts(receipts storage.KV) *BlockBuilder {
 
 func (bb *BlockBuilder) Build() *Block {
 	header := BlockHeader{
-		parentHash:       bb.parentHash,
-		nonce:            bb.nonce,
-		timestamp:        bb.timestamp,
-		beneficiary:      bb.beneficiary,
-		difficulty:       bb.difficulty,
-		number:           bb.number,
-		stateHash:        bb.state.Hash(),
-		transactionsHash: bb.transactions.Hash(),
-		receiptsHash:     bb.receipts.Hash(),
+		ParentHash:       bb.parentHash,
+		Nonce:            bb.nonce,
+		Timestamp:        bb.timestamp,
+		Beneficiary:      bb.beneficiary,
+		Difficulty:       bb.difficulty,
+		Number:           bb.number,
+		StateHash:        bb.state.Hash(),
+		TransactionsHash: bb.transactions.Hash(),
+		ReceiptsHash:     bb.receipts.Hash(),
 	}
 	return &Block{
-		header:       header,
-		state:        bb.state,
-		transactions: bb.transactions,
-		receipts:     bb.receipts,
+		Header:       header,
+		State:        bb.state,
+		Transactions: bb.transactions,
+		Receipts:     bb.receipts,
 	}
 
 }
 
 // Hash returns the hex-encoded sha256 bytes
 func (b *Block) Hash() string {
-	raw := []byte(fmt.Sprintf(""))
+	var err error = nil
 	h := sha256.New()
-	_, err := h.Write(raw)
+	writeOnce := func(raw []byte) {
+		if err != nil {
+			return
+		}
+		_, err = h.Write(raw)
+	}
+	headerHash := b.Header.hash()
+	writeOnce(headerHash)
+	writeOnce([]byte(b.State.Hash()))
+	writeOnce([]byte(b.Transactions.Hash()))
+	writeOnce([]byte(b.Receipts.Hash()))
 	if err != nil {
 		panic(err)
 	}
@@ -151,12 +203,12 @@ func (b *Block) String() string {
 		}
 	}
 
-	row1 := fmt.Sprintf("%s| %s", padOrCrop("prev", 6), b.header.parentHash)
-	row2 := fmt.Sprintf("%s| %d", padOrCrop("idx", 6), b.header.number)
-	row3 := fmt.Sprintf("%s| %s", padOrCrop("time", 6), time.UnixMilli(b.header.timestamp))
-	row4 := fmt.Sprintf("%s| %s", padOrCrop("state", 6), b.state)
-	row5 := fmt.Sprintf("%s| %s", padOrCrop("txns", 6), b.transactions)
-	row6 := fmt.Sprintf("%s| %s", padOrCrop("recps", 6), b.receipts)
+	row1 := fmt.Sprintf("%s| %s", padOrCrop("prev", 6), b.Header.ParentHash)
+	row2 := fmt.Sprintf("%s| %d", padOrCrop("idx", 6), b.Header.Number)
+	row3 := fmt.Sprintf("%s| %s", padOrCrop("time", 6), time.UnixMilli(b.Header.Timestamp))
+	row4 := fmt.Sprintf("%s| %s", padOrCrop("state", 6), b.State)
+	row5 := fmt.Sprintf("%s| %s", padOrCrop("txns", 6), b.Transactions)
+	row6 := fmt.Sprintf("%s| %s", padOrCrop("recps", 6), b.Receipts)
 
 	maxLen := max(row1, row2, row3, row4, row5, row6)
 	row1 = padOrCrop(row1, maxLen)
