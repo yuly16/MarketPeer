@@ -2,10 +2,10 @@ package client
 
 import (
 	"go.dedis.ch/cs438/blockchain"
-	"go.dedis.ch/cs438/peer/impl"
+	"go.dedis.ch/cs438/chord"
 )
 
 type Client struct {
 	BlockChainFullNode blockchain.FullNode
-	ChordNode          impl.Chord
+	ChordNode          chord.Chord
 }

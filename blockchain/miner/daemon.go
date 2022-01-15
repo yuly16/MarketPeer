@@ -1,6 +1,7 @@
 package miner
 
 import (
+	"fmt"
 	"go.dedis.ch/cs438/blockchain/block"
 	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/blockchain/transaction"
@@ -56,7 +57,7 @@ func (m *Miner) verifyAndExecuteTxnd() {
 		latestState, lastBlock := m.chain.LatestWorldState() // based on the latest state in our chain
 		newBlock := m.verifyAndExecuteTxnLoop(lastBlock, latestState)
 		// broadcast the newBlock to others
-		
+		fmt.Println(newBlock)
 	}
 }
 
