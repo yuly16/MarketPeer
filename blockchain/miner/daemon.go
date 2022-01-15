@@ -13,7 +13,6 @@ import (
 func (m *Miner) verifyAndExecuteTxnLoop(lastBlock *block.Block, worldState storage.KV) *block.Block {
 	verifiedTxns := make([]*transaction.SignedTransaction, 0, m.blocktxns+1)
 	for {
-		
 		txn := <-m.txnCh
 		// verify
 		if err := m.verifyTxn(txn, worldState); err != nil {
