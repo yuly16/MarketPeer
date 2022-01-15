@@ -1,15 +1,22 @@
-package block
+package tests
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/stretchr/testify/require"
 	"go.dedis.ch/cs438/blockchain/account"
+	"go.dedis.ch/cs438/blockchain/block"
 	"go.dedis.ch/cs438/blockchain/storage"
+	z "go.dedis.ch/cs438/internal/testing"
+	"go.dedis.ch/cs438/registry/standard"
+	"go.dedis.ch/cs438/transport/channel"
 	"testing"
+	"time"
 )
 
 func TestBlockBuilder(t *testing.T) {
 	var kvFactory storage.KVFactory = storage.CreateSimpleKV
-	bb := NewBlockBuilder(kvFactory).
+	bb := block.NewBlockBuilder(kvFactory).
 		SetParentHash("ffff").
 		SetNonce("fuck").
 		SetNumber(0).
@@ -35,7 +42,7 @@ func TestBlockBuilder2(t *testing.T) {
 	state2 := account.NewStateBuilder(kvFactory).SetBalance(200).Build()
 	state3 := account.NewStateBuilder(kvFactory).SetBalance(300).Build()
 
-	b1 := NewBlockBuilder(kvFactory).
+	b1 := block.NewBlockBuilder(kvFactory).
 		SetParentHash("ffff").
 		SetNonce("fuck").
 		SetNumber(0).
@@ -50,17 +57,17 @@ func TestBlockBuilder2(t *testing.T) {
 func TestBlockChainString(t *testing.T) {
 	var kvFactory storage.KVFactory = storage.CreateSimpleKV
 
-	bb := NewBlockBuilder(kvFactory).
+	bb := block.NewBlockBuilder(kvFactory).
 		SetParentHash("ffff").
 		SetNonce("fuck").
 		SetNumber(0).
-		setState(storage.NewSimpleKV()).
-		setTxns(storage.NewSimpleKV()).
-		setReceipts(storage.NewSimpleKV()).
+		SetState(storage.NewSimpleKV()).
+		SetTxns(storage.NewSimpleKV()).
+		SetReceipts(storage.NewSimpleKV()).
 		SetBeneficiary(*account.NewAddress([8]byte{}))
 	b := bb.Build()
 
-	bc := NewBlockChain()
+	bc := block.NewBlockChain()
 	bc.Append(b)
 	bc.Append(b)
 	bc.Append(b)
@@ -70,28 +77,44 @@ func TestBlockChainString(t *testing.T) {
 
 func TestBlockChainVerify(t *testing.T) {
 	var kvFactory storage.KVFactory = storage.CreateSimpleKV
+	transp := channel.NewTransport()
+	sock1, err := transp.CreateSocket("127.0.0.1:0")
 
-	bb := NewBlockBuilder(kvFactory).
+	require.NoError(t, err)
+	privateKey1, err := crypto.GenerateKey()
+	require.NoError(t, err)
+
+	fullNode1, _ := z.NewTestFullNode(t,
+		z.WithSocket(sock1),
+		z.WithMessageRegistry(standard.NewRegistry()),
+		z.WithPrivateKey(privateKey1),
+	)
+	fullNode1.Start()
+	defer fullNode1.Stop()
+
+	bb := block.NewBlockBuilder(kvFactory).
 		SetParentHash("ffff").
 		SetNonce("fuck").
 		SetNumber(0).
-		setState(storage.NewSimpleKV()).
-		setTxns(storage.NewSimpleKV()).
-		setReceipts(storage.NewSimpleKV()).
+		SetState(storage.NewSimpleKV()).
+		SetTxns(storage.NewSimpleKV()).
+		SetReceipts(storage.NewSimpleKV()).
 		SetBeneficiary(*account.NewAddress([8]byte{}))
 	b := bb.Build()
-
-	bc := NewBlockChain()
+	//fullNode1.Test_submitTxn()
+	bc := block.NewBlockChain()
 	bc.Append(b)
 	bc.Append(b)
 	bc.Append(b)
 	fmt.Println(bc)
+	fullNode1.BroadcastBlock(*b)
+	time.Sleep(time.Second * 5)
 }
 
 func TestBlockHash(t *testing.T) {
-	genesis := DefaultGenesis()
+	genesis := block.DefaultGenesis()
 	fmt.Println(genesis.Hash())
-	next := NewBlockBuilder(storage.CreateSimpleKV).SetParentHash(genesis.Hash()).Build()
+	next := block.NewBlockBuilder(storage.CreateSimpleKV).SetParentHash(genesis.Hash()).Build()
 	fmt.Println(next.Hash())
 }
 

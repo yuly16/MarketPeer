@@ -112,7 +112,7 @@ func (bb *BlockBuilder) SetNumber(number int) *BlockBuilder {
 	return bb
 }
 
-func (bb *BlockBuilder) setState(state storage.KV) *BlockBuilder {
+func (bb *BlockBuilder) SetState(state storage.KV) *BlockBuilder {
 	bb.state = state
 	return bb
 }
@@ -132,15 +132,21 @@ func (bb *BlockBuilder) AddTxn(txn *transaction.SignedTransaction) *BlockBuilder
 	return bb
 }
 
-func (bb *BlockBuilder) setTxns(txns storage.KV) *BlockBuilder {
+func (bb *BlockBuilder) SetTxns(txns storage.KV) *BlockBuilder {
 	bb.transactions = txns
 	return bb
 }
 
-func (bb *BlockBuilder) setReceipts(receipts storage.KV) *BlockBuilder {
+func (bb *BlockBuilder) SetReceipts(receipts storage.KV) *BlockBuilder {
 	bb.receipts = receipts
 	return bb
 }
+
+//func (bb *BlockBuilder) SetDifficulty(state storage.KV) *BlockBuilder {
+//	bb.difficulty = difficulty
+//	return bb
+//}
+
 
 func (bb *BlockBuilder) Build() *Block {
 	header := BlockHeader{

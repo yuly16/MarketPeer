@@ -249,10 +249,14 @@ func (m *Messager) Broadcast(msg transport.Message) error {
 			m.Warn().Msg("no neighbor, cannot broadcast, direct return")
 			// 0. if no neighbour, then directly process the embeded message
 			_header := transport.NewHeader(m.addr(), m.addr(), m.addr(), 0)
+
 			err = m.msgRegistry.ProcessPacket(transport.Packet{
 				Header: &_header,
 				Msg:    &msg,
 			})
+			if err != nil {
+				fmt.Println(err)
+			}
 			return
 		}
 		preNei := ""

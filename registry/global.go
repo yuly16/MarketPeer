@@ -2,6 +2,7 @@ package registry
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"go.dedis.ch/cs438/transport"
@@ -53,8 +54,9 @@ func (r globalRegistry) GetMessage(transpMsg *transport.Message) (types.Message,
 	// we create a new one because we don't want to update the registry map,
 	// which is only used to get an empty message that we can fill.
 	msg := m.NewEmpty()
-
+	fmt.Println(string(transpMsg.Payload))
 	err := json.Unmarshal(transpMsg.Payload, &msg)
+
 	if err != nil {
 		return nil, xerrors.Errorf("failed to unmarshal payload: %v", err)
 	}

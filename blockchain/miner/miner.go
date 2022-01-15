@@ -8,6 +8,7 @@ import (
 	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/blockchain/transaction"
 	"go.dedis.ch/cs438/logging"
+	"go.dedis.ch/cs438/types"
 	"sync/atomic"
 )
 
@@ -79,4 +80,16 @@ func (m *Miner) isKilled() bool {
 
 func (m *Miner) submitBlock() {}
 
-func (m *Miner) registerCallbacks() {}
+func (m *Miner) registerCallbacks() {
+	m.messaging.RegisterMessageCallback(types.BlockMessage{}, m.BlockMsgCallback)
+}
+
+
+// ---------------------------------the code is just for testing------------------------
+
+func (m *Miner) BroadcastBlock(block block.Block) {
+	err := m.messaging.Broadcast(types.BlockMessage{Block: block})
+	if err != nil {
+		return
+	}
+}
