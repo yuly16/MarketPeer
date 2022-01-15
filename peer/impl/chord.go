@@ -196,7 +196,7 @@ func (c *Chord) FindSuccessorRemote(dest string, id uint) (string, error) {
 		c.chordId, c.hashKey(dest), id)
 
 	// waiting for successor of id
-	timer := time.After(500 * time.Second)
+	timer := time.After(10 * time.Second)
 	select {
 	case findSuccMsg := <- findSuccCh:
 		log.Debug().Msgf("FindSuccessorRemote: %d receives successorReply from %d, id = %d\n",
