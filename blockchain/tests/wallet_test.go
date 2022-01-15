@@ -43,7 +43,7 @@ func TestTxnSubmitAndVerify(t *testing.T) {
 	fullNode2.Start()
 	defer fullNode2.Stop()
 
-	
+
 	require.NoError(t, err)
 	privateKey3, err := crypto.GenerateKey()
 	require.NoError(t, err)

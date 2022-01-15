@@ -44,7 +44,7 @@ func Test_Chord_sixPeers_createSystem(t *testing.T) {
 	//transp := channel.NewTransport()
 	transp := udp.NewUDP()
 	nodeNum := 6
-	bitNum := 10
+	bitNum := 12
 
 	nodes := make([]NodeWarp, nodeNum)
 	for i := 0; i < nodeNum; i++ {
@@ -72,7 +72,7 @@ func Test_Chord_sixPeers_createSystem(t *testing.T) {
 		require.NoError(t, nodes[i].node.Join(nodes[i-1].node.GetAddr()))
 	}
 	fmt.Println("chord starts...")
-	time.Sleep(120 * time.Second)
+	time.Sleep(180 * time.Second)
 	fmt.Println("chord ends")
 	sort.Slice(nodes, func(i, j int) bool {
 		return nodes[i].id < nodes[j].id
