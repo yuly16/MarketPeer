@@ -9,48 +9,55 @@ import (
 
 // verifyTxnLoop will verify  a block of transactions,
 // until it reached the blockTxns threshold. based on the given worldState
-func (m *Miner) verifyTxnLoop(worldState storage.KV) *block.Block {
-	verifiedTxns := make([]*transaction.SignedTransaction, 0, 10)
-
+func (m *Miner) verifyAndExecuteTxnLoop(lastBlock *block.Block, worldState storage.KV) *block.Block {
+	verifiedTxns := make([]*transaction.SignedTransaction, 0, m.blocktxns+1)
 	for {
 		txn := <-m.txnCh
+		// verify
 		if err := m.verifyTxn(txn, worldState); err != nil {
 			m.logger.Warn().Msgf("verify failed, err=%v", err)
 			continue
 		}
+		// execute
+		if err := m.executeTxn(txn, worldState); err != nil {
+			m.logger.Warn().Msgf("execute failed, err=%v", err)
+			continue
+		}
+		m.logger.Info().Msgf("verify and execute txn: %s", txn.String())
+
 		verifiedTxns = append(verifiedTxns, txn)
 		if len(verifiedTxns) < m.blocktxns {
 			continue
 		}
 		m.logger.Info().Msgf("%d verfied txns, prepare to construct the block", len(verifiedTxns))
-		block := block.NewBlockBuilder(m.kvFactory)
-		return block.Build()
+
+		// create a new block and broadcast to other miners
+		// first create basic block template based on last block
+		// state, transactions, and receipts remain to set
+		// nonce remain to compute
+		bb := lastBlock.NextBlockBuilder(m.kvFactory, m.accountAddr)
+		// set the state
+		bb.SetWorldState(worldState)
+		// set the txns
+		for _, txn := range verifiedTxns {
+			bb.AddTxn(txn)
+		}
+		// TODO: set the receipts
+		return m.blockPoW(bb)
 	}
-	return nil
 }
 
 // daemons
 // TODO: finish verification logic
-func (m *Miner) verifyTxnd() {
+func (m *Miner) verifyAndExecuteTxnd() {
 	// when verified transactions > threshold, we assemble a new block
-	// TODO: do we need to maintain current block's state? such that each transaction could modify the state
-	//		then, when we assemble the block, we directly set the new state?
-	//latestState := m.chain.LatestWorldState() // we are mutating the latest state in our chain
-	verifiedTxns := make([]*transaction.SignedTransaction, 0, 10)
 	for !m.isKilled() {
-		txn := <-m.txnCh
-		verifiedTxns = append(verifiedTxns, txn)
-		if len(verifiedTxns) < m.blocktxns {
-			continue
-		}
-		// could assemble a new block
-
+		// TODO: what if the latest block is changed?
+		latestState, lastBlock := m.chain.LatestWorldState() // based on the latest state in our chain
+		newBlock := m.verifyAndExecuteTxnLoop(lastBlock, latestState)
+		// broadcast the newBlock to others
+		
 	}
-}
-
-// TODO: onAssembleBlock needs to do PoW
-func (m *Miner) onAssembleBlock(verifiedTxns []*transaction.Transaction) *block.Block {
-	return block.NewBlockBuilder(m.kvFactory).Build()
 }
 
 func (m *Miner) verifyBlockd() {

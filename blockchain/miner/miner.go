@@ -3,6 +3,7 @@ package miner
 import (
 	"fmt"
 	"github.com/rs/zerolog"
+	"go.dedis.ch/cs438/blockchain/account"
 	"go.dedis.ch/cs438/blockchain/block"
 	"go.dedis.ch/cs438/blockchain/messaging"
 	"go.dedis.ch/cs438/blockchain/storage"
@@ -22,6 +23,7 @@ const (
 type MinerConf struct {
 	Messaging         messaging.Messager
 	Addr              string
+	AccountAddr       *account.Address
 	Bootstrap         *block.BlockChain
 	BlockTransactions int               // how many transactions in a block
 	KVFactory         storage.KVFactory // kv factory to create Blocks
@@ -36,9 +38,10 @@ type Miner struct {
 
 	chain *block.BlockChain
 
-	txnCh     chan *transaction.SignedTransaction
-	blocktxns int               // how many transactions in a block
-	kvFactory storage.KVFactory // kv factory to create Blocks
+	txnCh       chan *transaction.SignedTransaction
+	blocktxns   int               // how many transactions in a block
+	kvFactory   storage.KVFactory // kv factory to create Blocks
+	accountAddr *account.Address
 
 	// Service
 	stat int32
@@ -52,6 +55,7 @@ func NewMiner(conf MinerConf) *Miner {
 	m.txnCh = make(chan *transaction.SignedTransaction, 100)
 	m.blocktxns = conf.BlockTransactions
 	m.kvFactory = conf.KVFactory
+	m.accountAddr = conf.AccountAddr
 	m.logger = logging.RootLogger.With().Str("Miner", fmt.Sprintf("%s", conf.Addr)).Logger()
 	m.logger.Info().Msgf("miner created:\n %s", m.chain.String())
 	m.registerCallbacks()
@@ -66,7 +70,7 @@ func NewMiner(conf MinerConf) *Miner {
 
 func (m *Miner) Start() {
 	m.stat = ALIVE
-	go m.verifyTxnd()
+	go m.verifyAndExecuteTxnd()
 	go m.verifyBlockd()
 }
 

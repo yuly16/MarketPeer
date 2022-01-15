@@ -8,15 +8,15 @@ import (
 )
 
 type SimpleKV struct {
-	kv map[string]interface{}
+	Internal map[string]interface{}
 }
 
 func NewSimpleKV() *SimpleKV {
-	return &SimpleKV{kv: make(map[string]interface{})}
+	return &SimpleKV{Internal: make(map[string]interface{})}
 }
 
 func (skv *SimpleKV) Get(key string) (interface{}, error) {
-	value, ok := skv.kv[key]
+	value, ok := skv.Internal[key]
 	if !ok {
 		return nil, ErrKeyNotFound
 	}
@@ -24,17 +24,17 @@ func (skv *SimpleKV) Get(key string) (interface{}, error) {
 }
 
 func (skv *SimpleKV) Put(key string, value interface{}) error {
-	skv.kv[key] = value
+	skv.Internal[key] = value
 	return nil
 }
 
 func (skv *SimpleKV) Del(key string) error {
-	_, ok := skv.kv[key]
+	_, ok := skv.Internal[key]
 	if !ok {
 		return ErrKeyNotFound
 	}
 
-	delete(skv.kv, key)
+	delete(skv.Internal, key)
 	return nil
 }
 
@@ -53,7 +53,7 @@ func (skv *SimpleKV) Copy() KV {
 
 func (skv *SimpleKV) String() string {
 	ret := "{"
-	for key, value := range skv.kv {
+	for key, value := range skv.Internal {
 		ret += fmt.Sprintf("%s->%s", key, value)
 		ret += ","
 	}
@@ -62,7 +62,7 @@ func (skv *SimpleKV) String() string {
 
 func (skv *SimpleKV) Hash() string {
 	h := crypto.SHA256.New()
-	for key, value := range skv.kv {
+	for key, value := range skv.Internal {
 		_, err := h.Write([]byte(key))
 		if err != nil {
 			panic(err)
