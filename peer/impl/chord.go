@@ -19,7 +19,7 @@ import (
 
 
 func NewChord(messager peer.Messaging, conf peer.Configuration) *Chord {
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	zerolog.SetGlobalLevel(zerolog.ErrorLevel)
 
 	chordInstance := Chord{}
 	chordInstance.conf = conf
