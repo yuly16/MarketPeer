@@ -13,7 +13,7 @@ import (
 
 var DUMMY_PARENT_HASH string = strings.Repeat("0", 64)
 var GENESIS_DIFFICULTY int = 233
-var GENESIS_NONCE string = "TODO"
+var GENESIS_NONCE uint32 = 0
 var GENESIS_BENEFICIARY *account.Address = account.NewAddress([8]byte{})
 
 // DefaultGenesis returns the default genesis block
@@ -26,7 +26,7 @@ func DefaultGenesis() *Block {
 
 type BlockHeader struct {
 	ParentHash       string // hex form
-	Nonce            string // TODO
+	Nonce            uint32 // TODO
 	Timestamp        int64  // unix millseconds
 	Beneficiary      account.Address
 	Difficulty       int
@@ -46,7 +46,7 @@ func (bh *BlockHeader) hash() []byte {
 		_, err = h.Write(raw)
 	}
 	writeOnce([]byte(bh.ParentHash))
-	writeOnce([]byte(bh.Nonce))
+	writeOnce([]byte(fmt.Sprintf("%d", bh.Nonce)))
 	writeOnce([]byte(fmt.Sprintf("%d", bh.Timestamp)))
 	writeOnce([]byte(bh.Beneficiary.String()))
 	writeOnce([]byte(fmt.Sprintf("%d", bh.Number)))
@@ -68,7 +68,7 @@ type Block struct {
 
 type BlockBuilder struct {
 	parentHash   string // hex form
-	nonce        string // TODO
+	nonce        uint32 // TODO
 	timestamp    int64  // unix millseconds
 	beneficiary  account.Address
 	difficulty   int
@@ -87,7 +87,7 @@ func (bb *BlockBuilder) SetParentHash(parent string) *BlockBuilder {
 	return bb
 }
 
-func (bb *BlockBuilder) SetNonce(nonce string) *BlockBuilder {
+func (bb *BlockBuilder) SetNonce(nonce uint32) *BlockBuilder {
 	bb.nonce = nonce
 	return bb
 }
