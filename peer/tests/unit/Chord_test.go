@@ -190,7 +190,7 @@ func Test_Chord_fourteenPeers_createSystem(t *testing.T) {
 func Test_Chord_tenPeers_lookup(t *testing.T) {
 	//transp := channel.NewTransport()
 	transp := udp.NewUDP()
-	nodeNum := 10
+	nodeNum := 7
 	bitNum := 12
 	ip2node := map[uint]NodeWarp{}
 	nodes := make([]NodeWarp, nodeNum)
