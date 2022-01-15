@@ -2,6 +2,7 @@ package miner
 
 import (
 	"fmt"
+
 	"go.dedis.ch/cs438/blockchain/account"
 	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/blockchain/transaction"
@@ -64,5 +65,6 @@ func (m *Miner) doValueTransfer(txn *transaction.SignedTransaction, worldState s
 }
 
 func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storage.KV) error {
+
 	return nil
 }
