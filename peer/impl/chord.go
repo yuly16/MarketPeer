@@ -128,40 +128,33 @@ func (c *Chord) findSuccessor(id uint) (string, error) {
 	if id == c.chordId ||
 		(predecessor != "" &&
 			betweenRightInclude(id, c.hashKey(predecessor), c.chordId)) {
-		log.Debug().Msgf("case 0: %s\n", c.conf.Socket.GetAddress())
 		return c.conf.Socket.GetAddress(), nil
 	}
 	// case 1: if successor = "". This case happens in the initialization of chord
 	if successor == "" {
-		log.Debug().Msgf("case 1: %s\n", c.conf.Socket.GetAddress())
 		return c.conf.Socket.GetAddress(), nil
 	}
 
 	// case 2: if id is in (chordId, successor], return the address of successor
 	if betweenRightInclude(id, c.chordId, c.hashKey(successor)) {
-		log.Debug().Msgf("case 2: %s\n", successor)
 		return successor, nil
 	}
 
 	// case 3: if id is not in (chordId, successor]: call closestPredecessor to find the successor
 	nStar, err := c.closestPrecedingNode(id)
 	if err != nil {
-		log.Debug().Msgf("case 3.0: %s\n", err)
 		return "", err
 	}
 	// case 3.1 if nStar is equal to current node: return the successor of current node
 	// note: successor can't be nil! see the first line of this function
 	if nStar == c.conf.Socket.GetAddress() {
-		log.Debug().Msgf("case 3.1: %s\n", successor)
 		return successor, nil
 	}
 	// case 3.2 if nStar is not equal to current node:
 	successorOfId, err := c.FindSuccessorRemote(nStar, id)
 	if err != nil {
-		log.Debug().Msgf("case 3.2.1: %s\n", err)
 		return "", err
 	}
-	log.Debug().Msgf("case 3.2.2: %s\n", successorOfId)
 	return successorOfId, nil
 
 }

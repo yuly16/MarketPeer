@@ -265,7 +265,7 @@ func Test_Chord_tenPeers_lookup(t *testing.T) {
 
 		require.NoError(t, err)
 		require.NotEqual(t, "", dest)
-		
+
 		for k := 0; k < nodeNum; k++ {
 			if betweenRightInclude(uint(i), nodes[k].id, nodes[(k+1) % nodeNum].id) {
 				expect = nodes[(k+1) % nodeNum].id
