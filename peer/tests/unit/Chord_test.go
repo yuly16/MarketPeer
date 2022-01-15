@@ -259,7 +259,7 @@ func Test_Chord_tenPeers_lookup(t *testing.T) {
 
 	fmt.Println("putting...")
 	for i := 0; i < 1 << bitNum; i = i + 1 << 3 {
-		//fmt.Printf("put %d\n",i)
+		fmt.Printf("put %d\n",i)
 		dest, err := nodes[0].node.LookupHashId(uint(i))
 		var expect uint
 		if err != nil {
