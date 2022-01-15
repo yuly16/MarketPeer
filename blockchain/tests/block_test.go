@@ -1,7 +1,11 @@
 package tests
 
 import (
+	"encoding/json"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 	"go.dedis.ch/cs438/blockchain/account"
@@ -10,8 +14,6 @@ import (
 	z "go.dedis.ch/cs438/internal/testing"
 	"go.dedis.ch/cs438/registry/standard"
 	"go.dedis.ch/cs438/transport/channel"
-	"testing"
-	"time"
 )
 
 func TestBlockBuilder(t *testing.T) {
@@ -74,7 +76,6 @@ func TestBlockChainString(t *testing.T) {
 	fmt.Println(bc)
 }
 
-
 func TestBlockChainVerify(t *testing.T) {
 	var kvFactory storage.KVFactory = storage.CreateSimpleKV
 	transp := channel.NewTransport()
@@ -119,3 +120,17 @@ func TestBlockHash(t *testing.T) {
 	fmt.Println(next.Hash())
 }
 
+func TestBlockMarshal(t *testing.T) {
+	genesis := DefaultGenesis()
+	fmt.Println(genesis.String(), genesis.Hash())
+
+	v, err := json.Marshal(genesis)
+	fmt.Println(string(v))
+	require.NoError(t, err)
+	//unmarshaled := &Block{}
+	unmarshaled := NewBlockBuilder(storage.CreateSimpleKV).Build()
+	json.Unmarshal(v, unmarshaled)
+	//fmt.Println(unmarshaled.String(), unmarshaled.Hash())
+
+	fmt.Println(unmarshaled.String())
+}

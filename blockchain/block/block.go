@@ -82,6 +82,13 @@ func NewBlockBuilder(factory storage.KVFactory) *BlockBuilder {
 	return &BlockBuilder{state: factory(), transactions: factory(), receipts: factory()}
 }
 
+func (bb *BlockBuilder) GetDifficulty() int { return bb.difficulty }
+
+func (bb *BlockBuilder) SetWorldState(worldState storage.KV) *BlockBuilder {
+	bb.state = worldState
+	return bb
+}
+
 func (bb *BlockBuilder) SetParentHash(parent string) *BlockBuilder {
 	bb.parentHash = parent
 	return bb
@@ -170,8 +177,7 @@ func (bb *BlockBuilder) Build() *Block {
 
 }
 
-// Hash returns the hex-encoded sha256 bytes
-func (b *Block) Hash() string {
+func (b *Block) HashBytes() []byte {
 	var err error = nil
 	h := sha256.New()
 	writeOnce := func(raw []byte) {
@@ -188,7 +194,22 @@ func (b *Block) Hash() string {
 	if err != nil {
 		panic(err)
 	}
-	return hex.EncodeToString(h.Sum(nil))
+	return h.Sum(nil)
+}
+
+// Hash returns the hex-encoded sha256 bytes
+func (b *Block) Hash() string {
+	return hex.EncodeToString(b.HashBytes())
+}
+
+func (b *Block) NextBlockBuilder(factory storage.KVFactory, miner *account.Address) *BlockBuilder {
+	bb := NewBlockBuilder(factory).
+		SetParentHash(b.Hash()).
+		setDifficulty(b.Header.Difficulty).
+		setTimeStamp(time.Now().UnixMilli()).
+		SetNumber(b.Header.Number + 1).
+		SetBeneficiary(*miner)
+	return bb
 }
 
 func (b *Block) String() string {

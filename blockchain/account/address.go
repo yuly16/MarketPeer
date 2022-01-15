@@ -34,3 +34,13 @@ func (a *Address) String() string {
 func (a *Address) Equal(other *Address) bool {
 	return a.Hex == other.Hex
 }
+
+// IsContract : contract addr first 4 bytes are 0
+func (a *Address) IsContract() bool {
+	for i := 0; i < 4; i++ {
+		if int(a.Addr[i]) != 0 {
+			return false
+		}
+	}
+	return true
+}
