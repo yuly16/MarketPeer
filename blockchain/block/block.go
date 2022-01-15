@@ -142,11 +142,6 @@ func (bb *BlockBuilder) SetReceipts(receipts storage.KV) *BlockBuilder {
 	return bb
 }
 
-//func (bb *BlockBuilder) SetDifficulty(state storage.KV) *BlockBuilder {
-//	bb.difficulty = difficulty
-//	return bb
-//}
-
 
 func (bb *BlockBuilder) Build() *Block {
 	header := BlockHeader{
