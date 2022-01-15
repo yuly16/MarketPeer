@@ -21,7 +21,7 @@ import (
 func generateGenesisBlock(kvFactory storage.KVFactory, accounts ...*account.Account) *block.Block {
 	bb := block.NewBlockBuilder(kvFactory).
 		SetParentHash(block.DUMMY_PARENT_HASH).
-		SetNonce("fuck").
+		SetNonce(1).
 		SetNumber(0).
 		SetBeneficiary(*account.NewAddress([8]byte{}))
 	for _, acc := range accounts {

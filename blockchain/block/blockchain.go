@@ -24,8 +24,12 @@ func (bc *BlockChain) LatestWorldState() storage.KV {
 }
 
 // might panic, we need to ensure genesis block always exists
-func (bc *BlockChain) lastBlock() *Block {
-	return bc.blocks[len(bc.blocks)-1]
+func (bc *BlockChain) LastBlock() *Block {
+	if len(bc.blocks) == 0 {
+		return nil
+	} else {
+		return bc.blocks[len(bc.blocks)-1]
+	}
 }
 
 func (bc *BlockChain) Append(block *Block) error {

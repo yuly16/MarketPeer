@@ -112,6 +112,12 @@ func (bb *BlockBuilder) SetNumber(number int) *BlockBuilder {
 	return bb
 }
 
+func (bb *BlockBuilder) SetDifficulty(difficulty int) *BlockBuilder {
+	bb.difficulty = difficulty
+	return bb
+}
+
+
 func (bb *BlockBuilder) SetState(state storage.KV) *BlockBuilder {
 	bb.state = state
 	return bb

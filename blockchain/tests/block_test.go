@@ -94,10 +94,11 @@ func TestBlockChainVerify(t *testing.T) {
 
 	bb := block.NewBlockBuilder(kvFactory).
 		SetParentHash("ffff").
-		SetNonce("fuck").
+		SetNonce(1).
 		SetNumber(0).
 		SetState(storage.NewSimpleKV()).
 		SetTxns(storage.NewSimpleKV()).
+		SetDifficulty(2).
 		SetReceipts(storage.NewSimpleKV()).
 		SetBeneficiary(*account.NewAddress([8]byte{}))
 	b := bb.Build()
