@@ -11,7 +11,7 @@ func TestBlockBuilder(t *testing.T) {
 	var kvFactory storage.KVFactory = storage.CreateSimpleKV
 	bb := NewBlockBuilder(kvFactory).
 		SetParentHash("ffff").
-		SetNonce("fuck").
+		SetNonce(0).
 		SetNumber(0).
 		//setState(storage.NewSimpleKV()).
 		//setTxns(storage.NewSimpleKV()).
@@ -37,7 +37,7 @@ func TestBlockBuilder2(t *testing.T) {
 
 	b1 := NewBlockBuilder(kvFactory).
 		SetParentHash("ffff").
-		SetNonce("fuck").
+		SetNonce(0).
 		SetNumber(0).
 		SetAddrState(addr0, state0).
 		SetAddrState(addr1, state1).
@@ -52,7 +52,7 @@ func TestBlockChainString(t *testing.T) {
 
 	bb := NewBlockBuilder(kvFactory).
 		SetParentHash("ffff").
-		SetNonce("fuck").
+		SetNonce(0).
 		SetNumber(0).
 		setState(storage.NewSimpleKV()).
 		setTxns(storage.NewSimpleKV()).
