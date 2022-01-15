@@ -72,7 +72,7 @@ func Test_Chord_sixPeers_createSystem(t *testing.T) {
 		require.NoError(t, nodes[i].node.Join(nodes[i-1].node.GetAddr()))
 	}
 	fmt.Println("chord starts...")
-	time.Sleep(180 * time.Second)
+	time.Sleep(120 * time.Second)
 	fmt.Println("chord ends")
 	sort.Slice(nodes, func(i, j int) bool {
 		return nodes[i].id < nodes[j].id
