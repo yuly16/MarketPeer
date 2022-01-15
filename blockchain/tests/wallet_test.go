@@ -1,9 +1,10 @@
 package tests
 
 import (
-	"github.com/ethereum/go-ethereum/crypto"
 	"testing"
 	"time"
+
+	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/stretchr/testify/require"
 	"go.dedis.ch/cs438/registry/standard"
@@ -20,7 +21,6 @@ func TestTxnSubmitAndVerify(t *testing.T) {
 	require.NoError(t, err)
 	privateKey1, err := crypto.GenerateKey()
 	require.NoError(t, err)
-
 
 	fullNode1, messager1 := z.NewTestFullNode(t,
 		z.WithSocket(sock1),
@@ -43,7 +43,6 @@ func TestTxnSubmitAndVerify(t *testing.T) {
 	fullNode2.Start()
 	defer fullNode2.Stop()
 
-
 	require.NoError(t, err)
 	privateKey3, err := crypto.GenerateKey()
 	require.NoError(t, err)
@@ -52,7 +51,7 @@ func TestTxnSubmitAndVerify(t *testing.T) {
 	fullNode3, _ := z.NewTestFullNode(t,
 		z.WithSocket(sock3),
 		z.WithMessageRegistry(standard.NewRegistry()),
-		z.WithHeartbeat(time.Microsecond * 500),
+		z.WithHeartbeat(time.Microsecond*500),
 		z.WithPrivateKey(privateKey3),
 	)
 	fullNode3.Start()
@@ -65,4 +64,3 @@ func TestTxnSubmitAndVerify(t *testing.T) {
 	fullNode1.Test_submitTxn()
 	time.Sleep(10 * time.Second)
 }
-

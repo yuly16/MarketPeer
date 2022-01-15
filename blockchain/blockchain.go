@@ -25,6 +25,8 @@ type FullNodeConf struct {
 	Bootstrap  *block.BlockChain
 	KVFactory  storage.KVFactory
 	Account    *account.Account
+
+	BlockTransactions int // how many transactions in a block
 }
 
 // FullNode is a Wallet as well as a Miner
@@ -39,7 +41,7 @@ type FullNode struct {
 func NewFullNode(conf *FullNodeConf) *FullNode {
 	m := miner.NewMiner(miner.MinerConf{
 		Addr: conf.Addr, Messaging: conf.Messaging,
-		Bootstrap: conf.Bootstrap})
+		Bootstrap: conf.Bootstrap, KVFactory: conf.KVFactory})
 
 	w := wallet.NewWallet(wallet.WalletConf{
 		Addr: conf.Addr, Messaging: conf.Messaging,

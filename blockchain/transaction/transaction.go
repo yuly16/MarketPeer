@@ -3,8 +3,10 @@ package transaction
 import (
 	"crypto/ecdsa"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"go.dedis.ch/cs438/blockchain/account"
 )
@@ -57,14 +59,22 @@ type Transaction struct {
 	S     string
 }
 
-type SignedTransaction struct {
-	Txn 		Transaction
-	Digest      []byte
-	Signature   []byte
+func (t *Transaction) String() string {
+	return fmt.Sprintf("{nonce: %d, value: %d, v: %s, r: %s, s:%s}", t.Nonce, t.Value, t.V, t.R, t.S)
 }
 
-
-func (t Transaction) Print() {
+func (t *Transaction) Print() {
 	fmt.Printf("transaction info: nonce: %d, value: %d, v: %s, r: %s, s:%s\n",
 		t.Nonce, t.Value, t.V, t.R, t.S)
+}
+
+type SignedTransaction struct {
+	Txn       Transaction
+	Digest    []byte
+	Signature []byte
+}
+
+func (t *SignedTransaction) String() string {
+	return fmt.Sprintf("{txn=%s, digest=%s, sig=%s}", t.Txn.String(),
+		hex.EncodeToString(t.Digest), hex.EncodeToString(t.Signature))
 }

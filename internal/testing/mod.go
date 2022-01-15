@@ -162,6 +162,7 @@ type configTemplate struct {
 	blockchain *block.BlockChain
 	kvFactory  chainStorage.KVFactory
 	acc        *account.Account // TODO: update WalletConf directly with Account
+	blocktxns  int              // how many transactions in a block
 }
 
 func newConfigTemplate() configTemplate {
@@ -202,6 +203,7 @@ func newConfigTemplate() configTemplate {
 
 		blockchain: block.NewBlockChain(),
 		kvFactory:  chainStorage.CreateSimpleKV,
+		blocktxns:  1,
 	}
 }
 

@@ -2,6 +2,8 @@ package testing
 
 import (
 	"crypto/ecdsa"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"go.dedis.ch/cs438/blockchain"
 	"go.dedis.ch/cs438/blockchain/account"
@@ -10,7 +12,6 @@ import (
 	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/peer/impl"
-	"testing"
 )
 
 //type configTemplate struct {
@@ -44,6 +45,7 @@ func buildFullNodeConf(temp *configTemplate) *blockchain.FullNodeConf {
 	peerMessagerConf := buildPeerNodeConf(temp)
 	conf.Messaging = messaging.NewRegistryMessager(conf.Addr, impl.NewMessager(*peerMessagerConf), temp.registry)
 	conf.Bootstrap = temp.blockchain
+	conf.BlockTransactions = temp.blocktxns
 	return conf
 }
 
