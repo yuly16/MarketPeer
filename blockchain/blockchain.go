@@ -35,6 +35,7 @@ type FullNode struct {
 	messager messaging.Messager
 	*wallet.Wallet
 	*miner.Miner
+
 }
 
 // NewFullNode create a new full node, here we need to specify the transport layer
