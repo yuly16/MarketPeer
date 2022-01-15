@@ -67,3 +67,23 @@ func TestBlockChainString(t *testing.T) {
 	bc.Append(b)
 	fmt.Println(bc)
 }
+
+func TestBlockChainVerify(t *testing.T) {
+	var kvFactory storage.KVFactory = storage.CreateSimpleKV
+
+	bb := NewBlockBuilder(kvFactory).
+		SetParentHash("ffff").
+		SetNonce("fuck").
+		SetNumber(0).
+		setState(storage.NewSimpleKV()).
+		setTxns(storage.NewSimpleKV()).
+		setReceipts(storage.NewSimpleKV()).
+		SetBeneficiary(*account.NewAddress([8]byte{}))
+	b := bb.Build()
+
+	bc := NewBlockChain()
+	bc.Append(b)
+	bc.Append(b)
+	bc.Append(b)
+	fmt.Println(bc)
+}
