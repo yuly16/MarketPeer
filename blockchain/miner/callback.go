@@ -34,7 +34,7 @@ func (m *Miner) BlockMsgCallback(msg types.Message, pkt transport.Packet) error 
 	validate = validate && (strings.Compare(expect, actual) == 0)
 	// validate STATE
 	// TODO: need smart contract
-	
+
 	// if validate is true, save it
 	if validate {
 		err := m.chain.Append(&block.Block)
