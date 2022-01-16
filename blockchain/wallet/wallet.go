@@ -6,6 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
+	"time"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/rs/zerolog"
 	"go.dedis.ch/cs438/blockchain/account"
@@ -14,8 +17,6 @@ import (
 	"go.dedis.ch/cs438/blockchain/transaction"
 	"go.dedis.ch/cs438/logging"
 	"go.dedis.ch/cs438/types"
-	"math"
-	"time"
 )
 
 type WalletConf struct {
@@ -58,7 +59,9 @@ type Wallet struct {
 	publicKey  PublicKey
 	privateKey PrivateKey
 
-	syncFutures map[int]chan *types.SyncAccountReplyMessage // TODO: dont consider evict now
+	syncFutures     map[int]chan *types.SyncAccountReplyMessage                                       // TODO: dont consider evict now
+	verifyFutures   map[transaction.SignedTransactionHandle]chan *types.VerifyTransactionReplyMessage // TODO: dont consider evict now
+	verifyThreshold int
 }
 
 func NewWallet(conf WalletConf) *Wallet {
@@ -69,6 +72,8 @@ func NewWallet(conf WalletConf) *Wallet {
 	w.privateKey = PrivateKey{conf.PrivateKey, crypto.FromECDSA(conf.PrivateKey)}
 	w.account = conf.Account
 	w.syncFutures = make(map[int]chan *types.SyncAccountReplyMessage)
+	w.verifyFutures = make(map[transaction.SignedTransactionHandle]chan *types.VerifyTransactionReplyMessage)
+	w.verifyThreshold = 0
 	w.logger = logging.RootLogger.With().Str("Wallet", fmt.Sprintf("%s", conf.Addr)).Logger()
 	w.logger.Info().Msgf("wallet created:\n pubKey=%s, priKey=%s, account=%s",
 		w.publicKey.String(), w.privateKey.String(), w.account.String())
@@ -77,7 +82,9 @@ func NewWallet(conf WalletConf) *Wallet {
 	return &w
 }
 
-func (w *Wallet) Start() {}
+func (w *Wallet) Start() {
+	go w.syncAccountd()
+}
 
 func (w *Wallet) Stop() {}
 
@@ -137,21 +144,100 @@ func (w *Wallet) SyncAccount() error {
 }
 
 // TransferEpfer to dest
-func (w *Wallet) TransferEpfer(dest account.Account, epfer int) {
+func (w *Wallet) TransferEpfer(dest account.Address, epfer int) error {
 	// create a transaction and send
+	// first do a SyncAccount?
+	err := w.SyncAccount()
+	for err != nil {
+		w.logger.Warn().Msgf("value transfer sync account fail: %v", err)
+		err = w.SyncAccount()
+	}
+	// first do a local balance check
+	if w.account.GetBalance() < epfer {
+		return fmt.Errorf("not enough balance, actual=%d, transfer=%d", w.account.GetBalance(), epfer)
+	}
+	// create the transaction
+	txn := transaction.NewTransaction(w.account.GetNonce(), epfer, *w.GetAccount().GetAddr(), dest)
+	// submit
+	handle := w.SubmitTxn(txn)
+	time.Sleep(1 * time.Second)
+	// verify for a time
+	begin := time.Now()
+	err = w.VerifyTransaction(handle)
+	for err != nil {
+		err = w.VerifyTransaction(handle)
+		time.Sleep(500 * time.Millisecond)
+		if time.Since(begin) > 3*time.Second {
+			return fmt.Errorf("transaction failed")
+		}
+	}
+	return nil
+}
+
+func (w *Wallet) VerifyTransaction(handle *transaction.SignedTransactionHandle) error {
+	verifyMsg := &types.VerifyTransactionMessage{w.addr, *handle}
+	neis := w.messaging.GetNeighbors()
+	neis = append(neis, w.addr)
+	w.logger.Info().Msgf("verify txns with neis: %v", neis)
+	future := make(chan *types.VerifyTransactionReplyMessage, len(neis)+1)
+	w.verifyFutures[*handle] = future
+	waitfor := 0
+	for _, nei := range neis {
+		if err := w.messaging.Unicast(nei, verifyMsg); err != nil {
+			w.logger.Err(fmt.Errorf("verify txn error: %w", err)).Send()
+		}
+		waitfor += 1
+		w.logger.Debug().Msgf("verifyTxnMsg unicasted to %s", nei)
+	}
+	waitfor = int(math.Min(3, float64(waitfor)))
+	longestBlocksAfter := -1
+
+	w.logger.Info().Msgf("sync account started to waiting for reply")
+	for i := 0; i < waitfor; i++ {
+		reply := <-future
+		if reply.BlocksAfter > longestBlocksAfter {
+			longestBlocksAfter = reply.BlocksAfter
+		}
+	}
+	if longestBlocksAfter >= w.verifyThreshold {
+		return nil
+	}
+	return fmt.Errorf("longestBlocksAfter = %d < verifyThreshold=%d", longestBlocksAfter, w.verifyThreshold)
+}
+
+// ShowAccount returns account to application
+func (w *Wallet) ShowAccount() AccountInfo {
+	// first sync the account
+	err := w.SyncAccount()
+	for err != nil {
+		w.logger.Warn().Msgf("ShowAccount sync account fail: %v", err)
+		err = w.SyncAccount()
+	}
+	s := make(map[string]interface{})
+	w.account.GetState().StorageRoot.For(func(key string, value interface{}) error {
+		s[key] = value
+		return nil
+	})
+	return AccountInfo{Addr: w.account.GetAddr().String(), Balance: w.account.GetBalance(), Storage: s}
+}
+
+func (w *Wallet) TriggerContract(dest account.Account, data []byte) {
+
 }
 
 // wallet can submit a transaction
 // transaction is signed or not?
 // how is digital coin represented?
-func (w *Wallet) SubmitTxn(txn transaction.Transaction) {
-	txnMessage := types.WalletTransactionMessage{Txn: w.signTxn(txn)}
+func (w *Wallet) SubmitTxn(txn transaction.Transaction) *transaction.SignedTransactionHandle {
+	signed := w.signTxn(txn)
+	txnMessage := types.WalletTransactionMessage{Txn: signed}
 
 	err := w.messaging.Broadcast(txnMessage)
 	if err != nil {
 		w.logger.Error().Msg("submitTxn: broadcast a transantion error. ")
 	}
 	w.logger.Info().Msgf(fmt.Sprintf("broadcast a txn:%s", txnMessage.Txn.String()))
+	return &transaction.SignedTransactionHandle{signed.Hash()}
 }
 
 func (w *Wallet) hash(data interface{}) []byte {
@@ -187,6 +273,7 @@ func (w *Wallet) signTxn(txn transaction.Transaction) transaction.SignedTransact
 
 func (w *Wallet) registerCallbacks() {
 	w.messaging.RegisterMessageCallback(types.SyncAccountReplyMessage{}, w.SyncAccountReplyMessageCallback)
+	w.messaging.RegisterMessageCallback(types.VerifyTransactionReplyMessage{}, w.VerifyTxnReplyMessageCallback)
 
 }
 

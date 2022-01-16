@@ -11,6 +11,18 @@ type WalletTransactionMessage struct {
 	Txn transaction.SignedTransaction
 }
 
+type VerifyTransactionMessage struct {
+	// transaction handle
+	NetworkAddr string
+	Handle      transaction.SignedTransactionHandle
+}
+
+type VerifyTransactionReplyMessage struct {
+	// transaction handle
+	Handle      transaction.SignedTransactionHandle
+	BlocksAfter int // #blocks after the block including the handle. -1 means txn not in chain
+}
+
 type SyncAccountMessage struct {
 	Timestamp   int // used as async notify ID
 	NetworkAddr string

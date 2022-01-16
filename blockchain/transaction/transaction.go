@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	CREATE_CONTRACT = iota
-	EXEC_CONTRACT
+	EXEC_CONTRACT = iota
+	CREATE_CONTRACT
 	EXEC_TXN
 )
 
@@ -81,6 +81,19 @@ type SignedTransaction struct {
 	Txn       Transaction
 	Digest    []byte
 	Signature []byte
+}
+
+// SignedTransactionHandle used as a handle to find the txn in the chain
+type SignedTransactionHandle struct {
+	Hash string // hash of the signed transaction
+}
+
+func (st *SignedTransactionHandle) String() string {
+	return st.Hash
+}
+
+func (t *SignedTransaction) Hash() string {
+	return hex.EncodeToString(t.HashBytes())
 }
 
 func (t *SignedTransaction) HashBytes() []byte {

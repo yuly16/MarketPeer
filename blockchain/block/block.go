@@ -238,6 +238,15 @@ func (b *Block) NextBlockBuilder(factory storage.KVFactory, miner *account.Addre
 	return bb
 }
 
+func (b *Block) HasTxn(handle transaction.SignedTransactionHandle) bool {
+	for _, txn := range b.Transactions {
+		if txn.Hash() == handle.String() {
+			return true
+		}
+	}
+	return false
+}
+
 func (b *Block) String() string {
 	max := func(s ...string) int {
 		max := 0
