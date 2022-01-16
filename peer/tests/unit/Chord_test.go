@@ -44,7 +44,6 @@ func Test_Chord_twoPeers_createSystem(t *testing.T) {
 }
 
 
-
 // test 2: 6 node create a system
 func Test_Chord_sixPeers_createSystem(t *testing.T) {
 	//transp := channel.NewTransport()
@@ -114,12 +113,11 @@ func Test_Chord_sixPeers_createSystem(t *testing.T) {
 			require.Equal(t, expect, fingerTable[j])
 		}
 	}
-	fmt.Println("dsfghg")
 }
 
 
 // test 3: 14 node create a system
-func Test_Chord_fourteenPeers_createSystem(t *testing.T) {
+func Test_Chord_Peers_createSystem(t *testing.T) {
 	//transp := channel.NewTransport()
 	transp := udp.NewUDP()
 	nodeNum := 10
@@ -191,9 +189,8 @@ func Test_Chord_fourteenPeers_createSystem(t *testing.T) {
 }
 
 
-
 // test 4 if 10 peers can find the correct ip address
-func Test_Chord_tenPeers_lookup(t *testing.T) {
+func Test_Chord_Peers_lookup(t *testing.T) {
 	//transp := channel.NewTransport()
 	transp := udp.NewUDP()
 	nodeNum := 7
@@ -294,7 +291,8 @@ func Test_Chord_tenPeers_lookup(t *testing.T) {
 	}
 }
 
-// test 5 test transfer key
+
+// test 5 test transfer key simple test
 func Test_Chord_threePeers_transferKey(t *testing.T) {
 	transp := channel.NewTransport()
 	// this test is forbidden to use udp!
@@ -347,12 +345,13 @@ func Test_Chord_threePeers_transferKey(t *testing.T) {
 	require.Equal(t, nodes[2].node.GetChordStorage(), expect)
 }
 
-// test 6 test transfer key
-func Test_Chord_tenPeers_transferKey(t *testing.T) {
+
+// test 6 test transfer key big scenario
+func Test_Chord_Peers_transferKey(t *testing.T) {
 	transp := channel.NewTransport()
 	// this test is forbidden to use udp!
 	//transp := udp.NewUDP()
-	nodeNum := 10
+	nodeNum := 7
 	bitNum := 12
 	ip2node := map[uint]NodeWarp{}
 	nodes := make([]NodeWarp, nodeNum)
@@ -416,9 +415,11 @@ func Test_Chord_tenPeers_transferKey(t *testing.T) {
 
 }
 
+
 func betweenRightInclude(id uint, left uint, right uint) bool {
 	return between(id, left, right) || id == right
 }
+
 
 func between(id uint, left uint, right uint) bool {
 	if right > left {
