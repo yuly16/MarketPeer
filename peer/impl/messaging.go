@@ -116,7 +116,7 @@ func (m *Messager) listenDaemon() {
 		// timeout error
 		if err != nil && errors.As(err, &timeErr) {
 			// continue to receive
-			m.Info().Msg("timeout, continue listening")
+			m.Trace().Msg("timeout, continue listening")
 			continue
 		}
 		// other types of error
@@ -125,7 +125,7 @@ func (m *Messager) listenDaemon() {
 			continue
 		}
 		// start processing the pack
-		m.Info().Str("pkt", pack.String()).Msg("receive packet")
+		m.Debug().Str("pkt", pack.String()).Msg("receive packet")
 		// 0. update the routing table
 		m.addNeighbor(pack.Header.RelayedBy) // we can only ensure that relay is near us
 
@@ -255,7 +255,7 @@ func (m *Messager) Broadcast(msg transport.Message) error {
 				Msg:    &msg,
 			})
 			if err != nil {
-				fmt.Println(err)
+				m.Err(err).Send()
 			}
 			return
 		}
@@ -482,7 +482,7 @@ func (m *Messager) SetRoutingEntry(origin, relayAddr string) {
 		// simply overwrite
 		m.route[origin] = relayAddr
 	}
-	m.Info().Str("origin", origin).Str("relay", relayAddr).Msg("set routing entry")
+	m.Debug().Str("origin", origin).Str("relay", relayAddr).Msg("set routing entry")
 	m.Debug().Str("route", m.route.String()).Msg("routing table after set")
 }
 

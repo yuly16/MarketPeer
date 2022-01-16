@@ -2,6 +2,7 @@ package impl
 
 import (
 	"fmt"
+	"github.com/rs/zerolog"
 	"math/rand"
 	"regexp"
 	"strings"
@@ -21,7 +22,7 @@ import (
 // Q: seqs update shall onReceived or onProcessed?
 // A: currently onReceived. Because received req is guaranteed to be processed eventually.
 func (m *Messager) RumorsMsgCallback(msg types.Message, pkt transport.Packet) error {
-	__logger := m.Logger.With().Str("func", "RumorsMsgCallback").Logger()
+	__logger := m.Logger.With().Str("func", "RumorsMsgCallback").Logger().Level(zerolog.ErrorLevel)
 	__logger.Info().Msg("enter rumors callback")
 
 	// 1. processing each rumor
@@ -200,7 +201,7 @@ func (m *Messager) StatusMsgCallback(msg types.Message, pkt transport.Packet) er
 			m.Err(err).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send Rumors message: %w", err)
 		}
-		m.Info().Msgf("meExceptOther valid, unicast rumorsMsg %s to %s", _rumorsMsg, other)
+		m.Debug().Msgf("meExceptOther valid, unicast rumorsMsg %s to %s", _rumorsMsg, other)
 		if err := m.Unicast(other, rumorsMsg); err != nil {
 			m.Err(err).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send Rumors message: %w", err)
@@ -212,7 +213,7 @@ func (m *Messager) StatusMsgCallback(msg types.Message, pkt transport.Packet) er
 			m.Err(marshalErr).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send status message back: %w", marshalErr)
 		}
-		m.Info().Msgf("otherExceptMe valid, unicast statusMsg %s to %s", possibleStatusMsg, other)
+		m.Debug().Msgf("otherExceptMe valid, unicast statusMsg %s to %s", possibleStatusMsg, other)
 		if err := m.Unicast(other, possibleStatusMsg); err != nil {
 			m.Err(err).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send status message back: %w", err)
@@ -233,12 +234,12 @@ func (m *Messager) StatusMsgCallback(msg types.Message, pkt transport.Packet) er
 			m.Err(marshalErr).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send status message rand: %w", marshalErr)
 		}
-		m.Info().Msgf("same view, unicast statusMsg %s to random nei %s", statusMsg, other)
+		m.Debug().Msgf("same view, unicast statusMsg %s to random nei %s", statusMsg, other)
 		if err := m.Unicast(nei, possibleStatusMsg); err != nil {
 			m.Err(err).Send()
 			return fmt.Errorf("StatusMsgCallback fail: send status message rand: %w", err)
 		}
-		m.Logger.Info().Msgf("continue mongering to neighbor %s with status=%s", nei, possibleStatus)
+		m.Logger.Debug().Msgf("continue mongering to neighbor %s with status=%s", nei, possibleStatus)
 	}
 
 	return nil
@@ -263,7 +264,7 @@ func (m *Messager) AckMsgCallback(msg types.Message, pkt transport.Packet) error
 		future <- 0
 	} else {
 		// do nothing, it is a arrive-late ack msg
-		m.Info().Msgf("packet %s has no future to complete", pkt.Header.PacketID)
+		m.Debug().Msgf("packet %s has no future to complete", pkt.Header.PacketID)
 	}
 
 	// FIXME: too many Marshalcall and error checking
