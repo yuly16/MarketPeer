@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 )
 
 type SimpleKV struct {
@@ -13,6 +14,16 @@ type SimpleKV struct {
 
 func NewSimpleKV() *SimpleKV {
 	return &SimpleKV{Internal: make(map[string]interface{})}
+}
+
+func (skv *SimpleKV) For(compute func(key string, value interface{}) error) error {
+	for k, v := range skv.Internal {
+		err := compute(k, v)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (skv *SimpleKV) Get(key string) (interface{}, error) {
@@ -38,31 +49,76 @@ func (skv *SimpleKV) Del(key string) error {
 	return nil
 }
 
-func (skv *SimpleKV) Copy() KV {
-	serialized, err := json.Marshal(skv)
-	if err != nil {
-		panic(err)
+// keys is not efficient, FIXME
+func (skv *SimpleKV) sortedKeys() []string {
+	ret := make([]string, 0, len(skv.Internal))
+	for k := range skv.Internal {
+		ret = append(ret, k)
 	}
-	var ret *SimpleKV = &SimpleKV{}
-	err = json.Unmarshal(serialized, ret)
-	if err != nil {
-		panic(err)
+	sort.Strings(ret)
+	return ret
+}
+
+// TODO: serialize and deserialize, it really fucked!
+func (skv *SimpleKV) Copy() KV {
+	ret := CreateSimpleKV()
+	for k, v := range skv.Internal {
+		switch vv := v.(type) {
+		case Copyable:
+			ret.Put(k, vv.Copy())
+		default:
+			ret.Put(k, v)
+		}
 	}
 	return ret
+	//serialized, err := json.Marshal(skv)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//var ret *SimpleKV = &SimpleKV{map[string]interface{}{}}
+	//err = json.Unmarshal(serialized, ret)
+	//for key, value := range ret.Internal {
+	//	vv, ok := value.(map[string]interface{})
+	//	if !ok {
+	//		panic(value)
+	//	}
+	//	state := account.NewStateBuilder(CreateSimpleKV).
+	//		SetNonce(vv["Nonce"].(uint)).
+	//		SetBalance(vv["Balance"].(uint)).
+	//		SetCode(vv["Code"].(string))
+	//	storageRoot := vv["StorageRoot"].(map[string]interface{})
+	//	for srk, srv := range storageRoot {
+	//		state.SetKV(srk, srv)
+	//	}
+	//	ret.Put(key, state.Build())
+	//}
+	//if err != nil {
+	//	panic(err)
+	//}
+	//return ret
 }
 
 func (skv *SimpleKV) String() string {
 	ret := "{"
-	for key, value := range skv.Internal {
+	for _, key := range skv.sortedKeys() {
+		value, ok := skv.Internal[key]
+		if !ok {
+			continue
+		}
 		ret += fmt.Sprintf("%s->%s", key, value)
 		ret += ","
 	}
+
 	return ret + "}"
 }
 
 func (skv *SimpleKV) Hash() string {
 	h := crypto.SHA256.New()
-	for key, value := range skv.Internal {
+	for _, key := range skv.sortedKeys() {
+		value, ok := skv.Internal[key]
+		if !ok {
+			continue
+		}
 		_, err := h.Write([]byte(key))
 		if err != nil {
 			panic(err)
