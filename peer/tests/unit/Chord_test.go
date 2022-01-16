@@ -16,6 +16,59 @@ type NodeWarp struct {
 	id   uint
 }
 
+// test 5 test transfer key simple test
+func Test_Chord_threePeers_transferKey(t *testing.T) {
+	transp := channel.NewTransport()
+
+	nodeNum := 3
+	bitNum := 7
+	ip2node := map[uint]NodeWarp{}
+	nodes := make([]NodeWarp, nodeNum)
+	for i := 0; i < nodeNum; i++ {
+		nodes[i].node = z.NewTestNode(t, peerFac, transp,
+			"127.0.0.1:0",
+			z.WithHeartbeat(time.Millisecond*500),
+			z.WithChordBits(uint(bitNum)),
+			z.WithStabilizeInterval(time.Millisecond*500),
+			z.WithFixFingersInterval(time.Millisecond*250))
+		nodes[i].id = nodes[i].node.GetChordId()
+		ip2node[nodes[i].node.GetChordId()] = nodes[i]
+		defer nodes[i].node.Stop()
+	}
+
+	// initialize table
+	for i := 0; i < nodeNum - 1; i++ {
+		nodes[i].node.AddPeer(nodes[i+1].node.GetAddr())
+	}
+	time.Sleep(6 * time.Second)
+
+	nodes[0].node.Init(nodes[1].node.GetAddr())
+	nodes[1].node.Init(nodes[0].node.GetAddr())
+
+	time.Sleep(10 * time.Second)
+
+
+	expect := map[uint]interface{}{100:"no", 112:"yes"}
+	empty := map[uint]interface{}{}
+	for k,v := range expect {
+		nodes[0].node.PutId(k,v)
+	}
+	time.Sleep(time.Second * 20)
+
+	require.Equal(t, empty, nodes[0].node.GetChordStorage())
+	require.Equal(t, expect, nodes[1].node.GetChordStorage())
+
+	for i := 2; i < nodeNum; i++ {
+		require.NoError(t, nodes[i].node.Join(nodes[i-1].node.GetAddr()))
+	}
+	time.Sleep(time.Second * 20)
+	require.Equal(t, nodes[0].node.GetChordStorage(), empty)
+	require.Equal(t, nodes[1].node.GetChordStorage(), empty)
+	require.Equal(t, nodes[2].node.GetChordStorage(), expect)
+}
+
+
+
 // test 1: two peers initial a chord system
 func Test_Chord_twoPeers_createSystem(t *testing.T) {
 	transp := channel.NewTransport()
@@ -73,7 +126,6 @@ func Test_Chord_sixPeers_createSystem(t *testing.T) {
 	nodes[1].node.Init(nodes[0].node.GetAddr())
 
 	for i := 2; i < nodeNum; i++ {
-		fmt.Println(i)
 		require.NoError(t, nodes[i].node.Join(nodes[i-1].node.GetAddr()))
 	}
 	fmt.Println("chord starts...")
@@ -145,7 +197,6 @@ func Test_Chord_Peers_createSystem(t *testing.T) {
 	nodes[1].node.Init(nodes[0].node.GetAddr())
 
 	for i := 2; i < nodeNum; i++ {
-		fmt.Println(i)
 		require.NoError(t, nodes[i].node.Join(nodes[i-1].node.GetAddr()))
 	}
 	fmt.Println("chord starts...")
@@ -219,7 +270,6 @@ func Test_Chord_Peers_lookup(t *testing.T) {
 	nodes[1].node.Init(nodes[0].node.GetAddr())
 
 	for i := 2; i < nodeNum; i++ {
-		fmt.Println(i)
 		require.NoError(t, nodes[i].node.Join(nodes[i-1].node.GetAddr()))
 	}
 	fmt.Println("chord starts...")
@@ -262,7 +312,6 @@ func Test_Chord_Peers_lookup(t *testing.T) {
 
 	fmt.Println("putting...")
 	for i := 0; i < 1 << bitNum; i = i + 1 << 3 {
-		fmt.Printf("put %d\n",i)
 		dest, err := nodes[0].node.LookupHashId(uint(i))
 		var expect uint
 
@@ -280,7 +329,6 @@ func Test_Chord_Peers_lookup(t *testing.T) {
 	}
 	fmt.Println("getting...")
 	for i := 0; i < 1 << bitNum; i = i + 1 << 3 {
-		//fmt.Printf("get %d\n",i)
 		dest, err := nodes[0].node.LookupHashId(uint(i))
 		if err != nil {
 			require.Error(t, err)
@@ -292,56 +340,6 @@ func Test_Chord_Peers_lookup(t *testing.T) {
 }
 
 
-// test 5 test transfer key simple test
-func Test_Chord_threePeers_transferKey(t *testing.T) {
-	transp := channel.NewTransport()
-
-	nodeNum := 3
-	bitNum := 7
-	ip2node := map[uint]NodeWarp{}
-	nodes := make([]NodeWarp, nodeNum)
-	for i := 0; i < nodeNum; i++ {
-		nodes[i].node = z.NewTestNode(t, peerFac, transp,
-			"127.0.0.1:0",
-			z.WithHeartbeat(time.Millisecond*500),
-			z.WithChordBits(uint(bitNum)),
-			z.WithStabilizeInterval(time.Millisecond*500),
-			z.WithFixFingersInterval(time.Millisecond*250))
-		nodes[i].id = nodes[i].node.GetChordId()
-		ip2node[nodes[i].node.GetChordId()] = nodes[i]
-		defer nodes[i].node.Stop()
-	}
-
-	// initialize table
-	for i := 0; i < nodeNum - 1; i++ {
-		nodes[i].node.AddPeer(nodes[i+1].node.GetAddr())
-	}
-	time.Sleep(6 * time.Second)
-
-	nodes[0].node.Init(nodes[1].node.GetAddr())
-	nodes[1].node.Init(nodes[0].node.GetAddr())
-
-	time.Sleep(10 * time.Second)
-
-
-	expect := map[uint]interface{}{100:"no", 112:"yes"}
-	empty := map[uint]interface{}{}
-	for k,v := range expect {
-		nodes[0].node.PutId(k,v)
-	}
-	time.Sleep(time.Second * 20)
-
-	require.Equal(t, empty, nodes[0].node.GetChordStorage())
-	require.Equal(t, expect, nodes[1].node.GetChordStorage())
-
-	for i := 2; i < nodeNum; i++ {
-		require.NoError(t, nodes[i].node.Join(nodes[i-1].node.GetAddr()))
-	}
-	time.Sleep(time.Second * 20)
-	require.Equal(t, nodes[0].node.GetChordStorage(), empty)
-	require.Equal(t, nodes[1].node.GetChordStorage(), empty)
-	require.Equal(t, nodes[2].node.GetChordStorage(), expect)
-}
 
 
 // test 6 test transfer key big scenario
@@ -394,7 +392,6 @@ func Test_Chord_Peers_transferKey(t *testing.T) {
 
 	fmt.Println("getting...")
 	for i := 0; i < 1 << bitNum; i = i + 1 << 3 {
-		fmt.Printf("get %d\n",i)
 		dest, err := nodes[0].node.LookupHashId(uint(i))
 		if err != nil {
 			require.Error(t, err)

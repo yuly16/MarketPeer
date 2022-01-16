@@ -146,7 +146,7 @@ func TestProductStorage(t *testing.T) {
 	actualOrange, ok := clientNode.ReadProduct(orange_key)
 	require.Equal(t, true, ok)
 	require.Equal(t, orange, actualOrange)
-
+	time.Sleep(time.Second * 1000)
 }
 
 
