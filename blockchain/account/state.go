@@ -14,7 +14,7 @@ type State struct {
 	Nonce       uint       // number of transactions created
 	Balance     uint       // number of Epfer/Fei owned
 	StorageRoot storage.KV // storage state, it is a KV
-	Code    	string     // code, only for contract account. empty for external account
+	Code        string     // code, only for contract account. empty for external account
 }
 
 // FIXME: can we return *State while also implementing Copyable?
@@ -30,7 +30,7 @@ func (s *State) Copy() storage.Copyable {
 type StateBuilder struct {
 	nonce       uint
 	balance     uint
-	code		string
+	code        string
 	storageRoot storage.KV
 }
 
@@ -65,16 +65,16 @@ func (sb *StateBuilder) Build() *State {
 		Nonce:       sb.nonce,
 		Balance:     sb.balance,
 		StorageRoot: sb.storageRoot,
-		Code: 	 	 sb.code,
+		Code:        sb.code,
 	}
 	return &s
 }
 
 func NewState(kvFactory storage.KVFactory) *State {
 	s := State{
-		Nonce:    0,
-		Balance:  0,
-		Code: 	  "",
+		Nonce:   0,
+		Balance: 0,
+		Code:    "",
 	}
 	s.StorageRoot = kvFactory()
 	return &s
@@ -101,6 +101,6 @@ func (s *State) Equal(other *State) bool {
 }
 
 func (s *State) String() string {
-	return fmt.Sprintf("{nonce=%d, balance=%d, storageHash=%s, code=%s}",
-		s.Nonce, s.Balance, s.StorageHash()[:8]+"...", s.Code)
+	return fmt.Sprintf("{nonce=%d, balance=%d, storage=%v}",
+		s.Nonce, s.Balance, s.StorageRoot)
 }
