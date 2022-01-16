@@ -257,9 +257,8 @@ func Test_Chord_Peers_lookup(t *testing.T) {
 			z.WithFixFingersInterval(time.Millisecond*250))
 		nodes[i].id = nodes[i].node.GetChordId()
 		ip2node[nodes[i].node.GetChordId()] = nodes[i]
-		defer nodes[i].node.Stop()
-	}
 
+	}
 	// initialize table
 	for i := 0; i < nodeNum - 1; i++ {
 		nodes[i].node.AddPeer(nodes[i+1].node.GetAddr())
@@ -336,6 +335,9 @@ func Test_Chord_Peers_lookup(t *testing.T) {
 		res, exists := ip2node[dest].node.GetId(uint(i))
 		require.Equal(t, exists, true)
 		require.Equal(t, uint(i), res)
+	}
+	for i := 0; i < nodeNum; i++ {
+		nodes[i].node.Stop()
 	}
 }
 
