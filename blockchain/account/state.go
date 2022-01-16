@@ -17,6 +17,16 @@ type State struct {
 	Code    	string     // code, only for contract account. empty for external account
 }
 
+// FIXME: can we return *State while also implementing Copyable?
+func (s *State) Copy() storage.Copyable {
+	ret := &State{}
+	ret.Nonce = s.Nonce
+	ret.Balance = s.Balance
+	ret.Code = s.Code
+	ret.StorageRoot = s.StorageRoot.Copy()
+	return ret
+}
+
 type StateBuilder struct {
 	nonce       uint
 	balance     uint

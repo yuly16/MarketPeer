@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	EXEC_CONTRACT = iota
+	EXEC_TXN = iota
+	EXEC_CONTRACT
 	CREATE_CONTRACT
-	EXEC_TXN
 )
 
 func NewTransaction(nonce int, value int, from account.Address, to account.Address) Transaction {
