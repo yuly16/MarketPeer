@@ -1,6 +1,8 @@
 package block
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sync"
 
@@ -14,7 +16,7 @@ type BlockChain struct {
 	blocksMap map[string]*Block
 	ends      []*Block // ends has same parent hash, they are forks in the end. their number is the same
 
-	blocks      []*Block   // let's first store it in an array
+	blocks []*Block // let's first store it in an array
 }
 
 func NewBlockChain() *BlockChain {
@@ -68,16 +70,17 @@ func (bc *BlockChain) TryAppend(block *Block) (*Block, error) {
 			block.Header.Number, endsNumber, block)
 	}
 
-	// block either connect with ends or connect with ends' parent hash
-	endParentHash := bc.ends[0].Header.ParentHash
-	// block connect with prevEnds, then it also becomes an end
-	if block.Header.ParentHash == endParentHash {
-		// double cross-check
-		if block.Header.Number != endsNumber {
-			panic(fmt.Errorf("fatal error, block numbering is confilcted with parentHash"))
-		}
-		return bc.blocksMap[endParentHash], nil
-	}
+	// TODO: now we only allow len(ends) = 0
+	//// block either connect with ends or connect with ends' parent hash
+	//endParentHash := bc.ends[0].Header.ParentHash
+	//// block connect with prevEnds, then it also becomes an end
+	//if block.Header.ParentHash == endParentHash {
+	//	// double cross-check
+	//	if block.Header.Number != endsNumber {
+	//		panic(fmt.Errorf("fatal error, block numbering is confilcted with parentHash"))
+	//	}
+	//	return bc.blocksMap[endParentHash], nil
+	//}
 
 	for _, b := range bc.ends {
 		// block connect with ends, then ends is flushed, and block will become the only end
@@ -101,19 +104,20 @@ func (bc *BlockChain) Append(block *Block) error {
 			block.Header.Number, endsNumber, block)
 	}
 
+	// TODO: now we only allow len(ends) = 0
 	// block either connect with ends or connect with ends' parent hash
-	endParentHash := bc.ends[0].Header.ParentHash
-	// block connect with prevEnds, then it also becomes an end
-	if block.Header.ParentHash == endParentHash {
-		// double cross-check
-		if block.Header.Number != endsNumber {
-			panic(fmt.Errorf("fatal error, block numbering is confilcted with parentHash"))
-		}
-
-		bc.blocksMap[block.Hash()] = block
-		bc.ends = append(bc.ends, block)
-		return nil
-	}
+	//endParentHash := bc.ends[0].Header.ParentHash
+	//// block connect with prevEnds, then it also becomes an end
+	//if block.Header.ParentHash == endParentHash {
+	//	// double cross-check
+	//	if block.Header.Number != endsNumber {
+	//		panic(fmt.Errorf("fatal error, block numbering is confilcted with parentHash"))
+	//	}
+	//
+	//	bc.blocksMap[block.Hash()] = block
+	//	bc.ends = append(bc.ends, block)
+	//	return nil
+	//}
 
 	for _, b := range bc.ends {
 		// block connect with ends, then ends is flushed, and block will become the only end
@@ -130,6 +134,26 @@ func (bc *BlockChain) Append(block *Block) error {
 		}
 	}
 	return fmt.Errorf("block too old, cannot connect to ends, block=%s", block)
+}
+
+func (bc *BlockChain) HashBytes() []byte {
+	h := sha256.New()
+	canicalEnd := bc.ends[0]
+	for _, end := range bc.ends {
+		h.Write(end.HashBytes())
+	}
+	prevEndsHash := canicalEnd.Header.ParentHash
+	ptr := prevEndsHash
+	for ptr != DUMMY_PARENT_HASH {
+		b := bc.blocksMap[ptr]
+		h.Write(b.HashBytes())
+		ptr = b.Header.ParentHash
+	}
+	return h.Sum(nil)
+}
+
+func (bc *BlockChain) Hash() string {
+	return hex.EncodeToString(bc.HashBytes())
 }
 
 func (bc *BlockChain) String() string {

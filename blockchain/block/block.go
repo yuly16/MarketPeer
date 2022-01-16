@@ -12,7 +12,7 @@ import (
 )
 
 var DUMMY_PARENT_HASH string = strings.Repeat("0", 64)
-var GENESIS_DIFFICULTY int = 233
+var GENESIS_DIFFICULTY int = 2
 var GENESIS_NONCE uint32 = 0
 var GENESIS_BENEFICIARY *account.Address = account.NewAddress([8]byte{})
 

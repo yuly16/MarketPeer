@@ -47,7 +47,6 @@ func (m *Miner) verifyAndExecuteTxnLoop(lastBlock *block.Block, worldState stora
 		}
 		m.logger.Debug().Msgf("block constructed, prepare to do PoW: %s", bb.Build().String())
 		finalized := m.blockPoW(bb)
-		m.logger.Info().Msgf("PoW done, block: %s", finalized.String())
 
 		// TODO: set the receipts
 		return finalized
@@ -84,6 +83,17 @@ func (m *Miner) verifyAndExecuteTxnd() {
 		//m.logger.Info().Msgf("append the new Block to chain")
 
 		// broadcast the newBlock to others
+		if _, err := m.chain.TryAppend(newBlock); err != nil {
+			m.logger.Warn().Msgf(fmt.Sprintf("mined block is stale, cannot append: %s", newBlock.String()))
+			// now check if the transactions in block are executed, if not, then rebuild block
+			// although this is an invalid block, but the txns in yet might not be included in current chain
+			// if this is not added, 3 nodes submit 3 concurrent txns. some txns might not be included in the network
+			for _, txn := range newBlock.Transactions {
+				m.txnCh <- txn
+			}
+			continue
+		}
+		m.logger.Info().Msgf("PoW done, block: %s", newBlock.String())
 		msg := types.BlockMessage{*newBlock}
 		if err := m.messaging.Broadcast(msg); err != nil {
 			m.logger.Err(err).Send()
