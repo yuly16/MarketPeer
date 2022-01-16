@@ -1,6 +1,7 @@
 package miner
 
 import (
+	"crypto/rand"
 	"fmt"
 
 	"go.dedis.ch/cs438/blockchain/account"
@@ -77,24 +78,22 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 }
 
 func (m *Miner) createContract(txn *transaction.SignedTransaction, worldState storage.KV) error {
-	//bytesBegin := []byte{0,0,0,0}
-	//bytes := make([]byte, 4)
-	//bytesEnd, err := rand.Read(bytes)
-	//if err != nil {
-	//	return err
-	//}
-	//value, err := worldState(txn.Txn.From.String())
-	//if err != nil {
-	//	return fmt.Errorf("from address dont exist: %w", err)
-	//}
-	//contractState, ok := value.(*account.State)
-	//if !ok {
-	//	return fmt.Errorf("contract state is corrupted: %v", contractState)
-	//}
-	//contractState.Code = txn.Txn.Code
-	//
-	//if err = worldState.Put(txn.Txn.From.String(), contractState); err != nil {
-	//	return fmt.Errorf("cannot put contract addr and state to KV: %w", err)
-	//}
+	bytesBegin := []byte{0,0,0,0}
+	bytesEnd := make([]byte, 4)
+	_, err := rand.Read(bytesEnd)
+	if err != nil {
+		return err
+	}
+	address := append(bytesBegin, bytesEnd...)
+	state := account.State{
+		Nonce: 0,
+		Balance: 0,
+		StorageRoot: nil,
+		Code: txn.Txn.Code,
+	}
+	err = worldState.Put(string(address), &state)
+	if err != nil {
+		return fmt.Errorf("put contract error: %w", err)
+	}
 	return nil
 }
