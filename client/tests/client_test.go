@@ -18,7 +18,7 @@ import (
 
 
 
-func TestSimpleScenario(t *testing.T) {
+func Test_Client_SimpleScenario(t *testing.T) {
 	//var kvFactory storage.KVFactory = storage.CreateSimpleKV
 	transp := channel.NewTransport()
 	nodeNum := 10
@@ -93,7 +93,7 @@ func TestSimpleScenario(t *testing.T) {
 	}
 }
 
-func TestProductStorage(t *testing.T) {
+func Test_Client_ProductStorage(t *testing.T) {
 	//var kvFactory storage.KVFactory = storage.CreateSimpleKV
 	transp := channel.NewTransport()
 	nodeNum := 5
@@ -171,7 +171,7 @@ func TestProductStorage(t *testing.T) {
 
 	actualApple, ok := clientNode.ReadProduct(apple_key)
 	require.Equal(t, true, ok)
-	require.Equal(t, apple_key, actualApple)
+	require.Equal(t, apple, actualApple)
 
 	actualBanana, ok := clientNode.ReadProduct(banana_key)
 	require.Equal(t, true, ok)
