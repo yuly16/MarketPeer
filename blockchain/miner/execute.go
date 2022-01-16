@@ -3,6 +3,9 @@ package miner
 import (
 	"fmt"
 
+	"go.dedis.ch/cs438/contract"
+	"go.dedis.ch/cs438/contract/impl"
+	"go.dedis.ch/cs438/contract/parser"
 	"go.dedis.ch/cs438/blockchain/account"
 	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/blockchain/transaction"
@@ -64,7 +67,40 @@ func (m *Miner) doValueTransfer(txn *transaction.SignedTransaction, worldState s
 	return nil
 }
 
+// Contract execution logistics
 func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storage.KV) error {
+	// 1. reconstruct the contract code in account state
+	var contract_inst impl.Contract
+	value, err := worldState.Get(txn.Txn.To.String())
+	if err != nil {
+		return fmt.Errorf("to address dont exist: %w", err)
+	}
+	contract_acc_state, ok := value.(*account.State)
+	if !ok {
+		return fmt.Errorf("to state is corrupted: %v", contract_acc_state)
+	}
+	contract_bytecode := contract_acc_state.Code
+	unmarshal_err := json.Unmarshal(contract_bytecode, &contract_inst)
+	if unmarshal_err != nil {
+		return fmt.Errorf("unmarshal contract byte code error: %w", unmarshal_err)
+	}
+
+	// 2. check conditions and collect actions in contract
+	valid, validate_err := contract_inst.ValidateAssumptions(worldState)
+	if validate_err != nil {
+		return fmt.Errorf("validating contract assumptions got stuck: %w", validate_err)
+	}
+	if !valid {
+		return nil
+	}
+	actions, clause_err := contract_inst.CollectActions(worldState)
+	if clause_err != nil {
+		return fmt.Errorf("contract if clauses fail to evaluate: %w", clause_err)
+	}
+
+	// 3. execute the transaction actions 
+	for 
+
 
 	return nil
 }

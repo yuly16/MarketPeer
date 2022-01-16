@@ -3,6 +3,7 @@ package impl
 import (
 	"strconv"
 	"github.com/disiqueira/gotree" // lib for print tree structure in terminal
+	"go.dedis.ch/cs438/contract/parser"
 )
 
 // To record the execution state of the contract, we need to maintain
@@ -12,7 +13,8 @@ import (
 type StateNode struct {
 	NodeId 	  int
 	Type 	  string
-	Executed  bool
+	Valid	  bool 	// for Assumption, Condition, Ifclause
+	Executed  bool	// for Action
 	Children  []*StateNode
 }
 
@@ -28,6 +30,14 @@ func (s *StateNode) GetExecuted() bool {
 	return s.Executed
 }
 
+func (s *StateNode) SetValid() {
+	s.Valid = true
+}
+
+func (s *StateNode) GetValid() bool {
+	return s.Valid
+}
+
 func (s *StateNode) GetNodeId() int {
 	return s.NodeId
 }
@@ -35,16 +45,16 @@ func (s *StateNode) GetNodeId() int {
 // Construct corresponding state tree, given the code AST
 // The structure of AST is rather predictable, so we don't need to recursively traverse
 // We assign a id to each node, so it will be easier to retrieve & manipulate with node id
-func ConstructStateTree(code_ast *Code) *StateNode {
+func ConstructStateTree(code_ast *parser.Code) *StateNode {
 	id_counter := 0
-	state_root := StateNode{id_counter, "code", false, []*StateNode{}}
+	state_root := StateNode{id_counter, "code", false, false, []*StateNode{}}
 	id_counter++
 	
 	// Process assumptions state
 	for i := 0; i < len(code_ast.Assumptions); i++ {
-		assumption_state := StateNode{id_counter, "assumption", false, []*StateNode{}}
+		assumption_state := StateNode{id_counter, "assumption", false, false, []*StateNode{}}
 		id_counter++
-		condition_state := StateNode{id_counter, "condition", false, []*StateNode{}}
+		condition_state := StateNode{id_counter, "condition", false, false, []*StateNode{}}
 		id_counter++
 		assumption_state.AppendChild(&condition_state)
 		state_root.AppendChild(&assumption_state)
@@ -52,13 +62,13 @@ func ConstructStateTree(code_ast *Code) *StateNode {
 
 	// Process if clauses state
 	for _, ifclause := range code_ast.IfClauses {
-		if_state := StateNode{id_counter, "if", false, []*StateNode{}}
+		if_state := StateNode{id_counter, "if", false, false, []*StateNode{}}
 		id_counter++
-		condition_state := StateNode{id_counter, "condition", false, []*StateNode{}}
+		condition_state := StateNode{id_counter, "condition", false, false, []*StateNode{}}
 		id_counter++
 		if_state.AppendChild(&condition_state)
 		for i := 0; i < len(ifclause.Actions); i++ {
-			action_state := StateNode{id_counter, "action", false, []*StateNode{}}
+			action_state := StateNode{id_counter, "action", false, false, []*StateNode{}}
 			id_counter++
 			if_state.AppendChild(&action_state)
 		}
@@ -69,7 +79,8 @@ func ConstructStateTree(code_ast *Code) *StateNode {
 }
 
 // Display the execution state AST, convenient for debug
-func DisplayStateAST(ast Code, state_ast *StateNode) string {
+// TODO: differientiate executed and valid in printing
+func DisplayStateAST(ast parser.Code, state_ast *StateNode) string {
 	root := gotree.New("State")
 	output_executed := map[bool]string{true: "√", false: "x"}
 

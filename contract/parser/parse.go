@@ -1,4 +1,4 @@
-package impl
+package parser
 
 import (
 	"fmt"
@@ -28,7 +28,7 @@ import (
 // (SUCCESS)
 
 // Lexer for the contract code. Rules are specified with regexp.
-// Need to tokenize to the minimum unit before parsing
+// Need to tokenize to the minimum unit be
 // nil meaning that the lexer is simple/stateless.
 var SMTLexer = lexer.MustSimple([]lexer.Rule{
 	{`Keyword`, `(?i)\b(ASSUME|IF|THEN)\b`, nil}, // not case sensitive

@@ -2,15 +2,11 @@ package tests
 
 import (
 	"fmt"
-	// "reflect"
-	// "encoding/json"
-	// "errors"
-	// "time"
-
 	"github.com/alecthomas/participle/v2"
 	"testing"
 	"github.com/stretchr/testify/require"
-	// "go.dedis.ch/cs438/contract"
+	"go.dedis.ch/cs438/blockchain/storage"
+	"go.dedis.ch/cs438/contract/parser"
 	"go.dedis.ch/cs438/contract/impl"
 )
 
@@ -24,8 +20,8 @@ func Test_Parser_Value(t *testing.T) {
 	expected_strings := []string{`parser`, `Hello World`}
 	expected_floats := []float64{0, 42, 123456, 0.125, 1.56789}
 
-	var ValueParser = participle.MustBuild(&impl.Value{},
-		participle.Lexer(impl.SMTLexer),
+	var ValueParser = participle.MustBuild(&parser.Value{},
+		participle.Lexer(parser.SMTLexer),
 		participle.Unquote("String"),
 	)
 
@@ -33,7 +29,7 @@ func Test_Parser_Value(t *testing.T) {
 	var parsed_floats []float64
 
 	for _, s := range value_strings {
-		val_ast := &impl.Value{}
+		val_ast := &parser.Value{}
 		err := ValueParser.ParseString("", s, val_ast)
 		require.NoError(t, err)
 		parsed_strings = append(parsed_strings, *val_ast.String)
@@ -41,7 +37,7 @@ func Test_Parser_Value(t *testing.T) {
 	require.Equal(t, expected_strings, parsed_strings)
 
 	for _, s := range value_floats {
-		val_ast := &impl.Value{}
+		val_ast := &parser.Value{}
 		err := ValueParser.ParseString("", s, val_ast)
 		require.NoError(t, err)
 		parsed_floats = append(parsed_floats, *val_ast.Number)
@@ -58,23 +54,23 @@ func Test_Parser_Object(t *testing.T) {
 		`seller.storage.product.amount`,
 	}
 
-	expected_objects := []*impl.Object{
+	expected_objects := []*parser.Object{
 		{
 			Role: "buyer",
-			Fields: []*impl.Field{
+			Fields: []*parser.Field{
 				{Name: "balance"},
 			},
 		},
 		{
 			Role: "buyer",
-			Fields: []*impl.Field{
+			Fields: []*parser.Field{
 				{Name: "storage"},
 				{Name: "attribute"},
 			},
 		},
 		{
 			Role: "seller",
-			Fields: []*impl.Field{
+			Fields: []*parser.Field{
 				{Name: "storage"},
 				{Name: "product"},
 				{Name: "amount"},
@@ -82,15 +78,15 @@ func Test_Parser_Object(t *testing.T) {
 		},
 	}
 
-	var ObjectParser = participle.MustBuild(&impl.Object{},
-		participle.Lexer(impl.SMTLexer),
+	var ObjectParser = participle.MustBuild(&parser.Object{},
+		participle.Lexer(parser.SMTLexer),
 		participle.Unquote("String"),
 	)
 
-	var parsed_objects []*impl.Object
+	var parsed_objects []*parser.Object
 
 	for _, s := range object_strings {
-		obj_ast := &impl.Object{}
+		obj_ast := &parser.Object{}
 		err := ObjectParser.ParseString("", s, obj_ast)
 		require.NoError(t, err)
 		parsed_objects = append(parsed_objects, obj_ast)
@@ -110,60 +106,60 @@ func Test_Parser_Condition(t *testing.T) {
 	expected_value2 := "available"
 	expected_value3 := float64(5)
 
-	expected_conditions := []*impl.Condition{
+	expected_conditions := []*parser.Condition{
 		{
-			Object: impl.Object{
+			Object: parser.Object{
 				Role: "buyer",
-				Fields: []*impl.Field{
+				Fields: []*parser.Field{
 					{Name: "balance"},
 				},
 			},
 			Op: ">",
-			Value: impl.Value{
+			Value: parser.Value{
 				String: nil,
 				Number: &expected_value1,
 			},
 		},
 		{
-			Object: impl.Object{
+			Object: parser.Object{
 				Role: "buyer",
-				Fields: []*impl.Field{
+				Fields: []*parser.Field{
 					{Name: "storage"},
 					{Name: "attribute"},
 				},
 			},
 			Op: "==",
-			Value: impl.Value{
+			Value: parser.Value{
 				String: &expected_value2,
 				Number: nil,
 			},
 		},
 		{
-			Object: impl.Object{
+			Object: parser.Object{
 				Role: "seller",
-				Fields: []*impl.Field{
+				Fields: []*parser.Field{
 					{Name: "storage"},
 					{Name: "product"},
 					{Name: "amount"},
 				},
 			},
 			Op: "<=",
-			Value: impl.Value{
+			Value: parser.Value{
 				String: nil,
 				Number: &expected_value3,
 			},
 		},
 	}
 
-	var ConditionParser = participle.MustBuild(&impl.Condition{},
-		participle.Lexer(impl.SMTLexer),
+	var ConditionParser = participle.MustBuild(&parser.Condition{},
+		participle.Lexer(parser.SMTLexer),
 		participle.Unquote("String"),
 	)
 
-	var parsed_conditions []*impl.Condition
+	var parsed_conditions []*parser.Condition
 
 	for _, s := range condition_strings {
-		cond_ast := &impl.Condition{}
+		cond_ast := &parser.Condition{}
 		err := ConditionParser.ParseString("", s, cond_ast)
 		require.NoError(t, err)
 		parsed_conditions = append(parsed_conditions, cond_ast)
@@ -184,11 +180,11 @@ func Test_Parser_Action(t *testing.T) {
 	expected_value2_2 := "product_id"
 	expected_value2_3 := float64(50)
 
-	expected_actions := []*impl.Action{
+	expected_actions := []*parser.Action{
 		{
 			Role: "buyer",
 			Action: "transfer",
-			Params: []*impl.Value{
+			Params: []*parser.Value{
 				{String: &expected_value1_1, Number: nil},
 				{String: nil, Number: &expected_value1_2},
 			},
@@ -196,7 +192,7 @@ func Test_Parser_Action(t *testing.T) {
 		{
 			Role: "seller",
 			Action: "send",
-			Params: []*impl.Value{
+			Params: []*parser.Value{
 				{String: &expected_value2_1, Number: nil},
 				{String: &expected_value2_2, Number: nil},
 				{String: nil, Number: &expected_value2_3},
@@ -204,15 +200,15 @@ func Test_Parser_Action(t *testing.T) {
 		},
 	}
 	
-	var ActionParser = participle.MustBuild(&impl.Action{},
-		participle.Lexer(impl.SMTLexer),
+	var ActionParser = participle.MustBuild(&parser.Action{},
+		participle.Lexer(parser.SMTLexer),
 		participle.Unquote("String"),
 	)
 
-	var parsed_actions []*impl.Action
+	var parsed_actions []*parser.Action
 
 	for _, s := range action_strings {
-		action_ast := &impl.Action{}
+		action_ast := &parser.Action{}
 		err := ActionParser.ParseString("", s, action_ast)
 		require.NoError(t, err)
 		parsed_actions = append(parsed_actions, action_ast)
@@ -231,33 +227,33 @@ func Test_Parser_Assume(t *testing.T) {
 	expected_value1 := float64(10.5)
 	expected_value2 := "available"
 
-	expected_assume := []*impl.Assumption{
+	expected_assume := []*parser.Assumption{
 		{
-			Condition: impl.Condition{
-				Object: impl.Object{
+			Condition: parser.Condition{
+				Object: parser.Object{
 					Role: "buyer",
-					Fields: []*impl.Field{
+					Fields: []*parser.Field{
 						{Name: "balance"},
 					},
 				},
 				Op: ">",
-				Value: impl.Value{
+				Value: parser.Value{
 					String: nil,
 					Number: &expected_value1,
 				},
 			},
 		},
 		{
-			Condition: impl.Condition{
-				Object: impl.Object{
+			Condition: parser.Condition{
+				Object: parser.Object{
 					Role: "buyer",
-					Fields: []*impl.Field{
+					Fields: []*parser.Field{
 						{Name: "storage"},
 						{Name: "attribute"},
 					},
 				},
 				Op: "==",
-				Value: impl.Value{
+				Value: parser.Value{
 					String: &expected_value2,
 					Number: nil,
 				},
@@ -265,15 +261,15 @@ func Test_Parser_Assume(t *testing.T) {
 		},
 	}
 
-	var AssumeParser = participle.MustBuild(&impl.Assumption{},
-		participle.Lexer(impl.SMTLexer),
+	var AssumeParser = participle.MustBuild(&parser.Assumption{},
+		participle.Lexer(parser.SMTLexer),
 		participle.Unquote("String"),
 	)
 
-	var parsed_assume []*impl.Assumption
+	var parsed_assume []*parser.Assumption
 
 	for _, s := range assume_strings {
-		assume_ast := &impl.Assumption{}
+		assume_ast := &parser.Assumption{}
 		err := AssumeParser.ParseString("", s, assume_ast)
 		require.NoError(t, err)
 		parsed_assume = append(parsed_assume, assume_ast)
@@ -297,26 +293,26 @@ func Test_Parser_Ifclause(t *testing.T) {
 	expected_value4 := "product_id"
 	expected_value5 := float64(50)
 
-	expected_if := []*impl.IfClause{
+	expected_if := []*parser.IfClause{
 		{
-			Condition: impl.Condition{
-				Object: impl.Object{
+			Condition: parser.Condition{
+				Object: parser.Object{
 					Role: "buyer",
-					Fields: []*impl.Field{
+					Fields: []*parser.Field{
 						{Name: "balance"},
 					},
 				},
 				Op: ">",
-				Value: impl.Value{
+				Value: parser.Value{
 					String: nil,
 					Number: &expected_value1,
 				},
 			},
-			Actions: []*impl.Action{
+			Actions: []*parser.Action{
 				{
 					Role: "buyer",
 					Action: "transfer",
-					Params: []*impl.Value{
+					Params: []*parser.Value{
 						{String: &expected_value2, Number: nil},
 						{String: nil, Number: &expected_value3},
 					},
@@ -324,7 +320,7 @@ func Test_Parser_Ifclause(t *testing.T) {
 				{
 					Role: "seller",
 					Action: "send",
-					Params: []*impl.Value{
+					Params: []*parser.Value{
 						{String: &expected_value2, Number: nil},
 						{String: &expected_value4, Number: nil},
 						{String: nil, Number: &expected_value5},
@@ -334,15 +330,15 @@ func Test_Parser_Ifclause(t *testing.T) {
 		},
 	}
 
-	var IfParser = participle.MustBuild(&impl.IfClause{},
-		participle.Lexer(impl.SMTLexer),
+	var IfParser = participle.MustBuild(&parser.IfClause{},
+		participle.Lexer(parser.SMTLexer),
 		participle.Unquote("String"),
 	)
 
-	var parsed_if []*impl.IfClause
+	var parsed_if []*parser.IfClause
 
 	for _, s := range if_strings {
-		if_ast := &impl.IfClause{}
+		if_ast := &parser.IfClause{}
 		err := IfParser.ParseString("", s, if_ast)
 		require.NoError(t, err)
 		parsed_if = append(parsed_if, if_ast)
@@ -371,61 +367,61 @@ func Test_Parser_Case(t *testing.T) {
 	expected_value6 := "product_id"
 	expected_value7 := float64(50)
 
-	expected_code := []*impl.Code{
+	expected_code := []*parser.Code{
 		{
-			Assumptions: []*impl.Assumption{
+			Assumptions: []*parser.Assumption{
 				{
-					Condition: impl.Condition{
-						Object: impl.Object{
+					Condition: parser.Condition{
+						Object: parser.Object{
 							Role: "seller",
-							Fields: []*impl.Field{
+							Fields: []*parser.Field{
 								{Name: "balance"},
 							},
 						},
 						Op: ">",
-						Value: impl.Value{
+						Value: parser.Value{
 							String: nil,
 							Number: &expected_value1,
 						},
 					},
 				},
 				{
-					Condition: impl.Condition{
-						Object: impl.Object{
+					Condition: parser.Condition{
+						Object: parser.Object{
 							Role: "seller",
-							Fields: []*impl.Field{
+							Fields: []*parser.Field{
 								{Name: "product"},
 								{Name: "amount"},
 							},
 						},
 						Op: "!=",
-						Value: impl.Value{
+						Value: parser.Value{
 							String: nil,
 							Number: &expected_value2,
 						},
 					},
 				},
 			},
-			IfClauses: []*impl.IfClause{
+			IfClauses: []*parser.IfClause{
 				{
-					Condition: impl.Condition{
-						Object: impl.Object{
+					Condition: parser.Condition{
+						Object: parser.Object{
 							Role: "buyer",
-							Fields: []*impl.Field{
+							Fields: []*parser.Field{
 								{Name: "balance"},
 							},
 						},
 						Op: ">",
-						Value: impl.Value{
+						Value: parser.Value{
 							String: nil,
 							Number: &expected_value3,
 						},
 					},
-					Actions: []*impl.Action{
+					Actions: []*parser.Action{
 						{
 							Role: "buyer",
 							Action: "transfer",
-							Params: []*impl.Value{
+							Params: []*parser.Value{
 								{String: &expected_value4, Number: nil},
 								{String: nil, Number: &expected_value5},
 							},
@@ -433,7 +429,7 @@ func Test_Parser_Case(t *testing.T) {
 						{
 							Role: "seller",
 							Action: "send",
-							Params: []*impl.Value{
+							Params: []*parser.Value{
 								{String: &expected_value4, Number: nil},
 								{String: &expected_value6, Number: nil},
 								{String: nil, Number: &expected_value7},
@@ -445,9 +441,9 @@ func Test_Parser_Case(t *testing.T) {
 		},
 	}
 
-	var parsed_code []*impl.Code
+	var parsed_code []*parser.Code
 	for _, s := range code_strings {
-		code_ast, err := impl.Parse(s)
+		code_ast, err := parser.Parse(s)
 		require.NoError(t, err)
 		parsed_code = append(parsed_code, &code_ast)
 	}
@@ -482,7 +478,6 @@ func Test_Contract_Marshal(t *testing.T) {
 	fmt.Println(contract_inst.String())
 	buf, err := contract_inst.Marshal()
 	require.NoError(t, err)
-	
 	var contract_unmarshal impl.Contract
 	err = impl.Unmarshal(buf, &contract_unmarshal)
 	require.NoError(t, err)
@@ -513,7 +508,7 @@ func Test_Contract_State_Tree(t *testing.T) {
 		"00000002", // acceptor_account
 	)
 
-	code_ast, err := impl.Parse(contract_code)
+	code_ast, err := parser.Parse(contract_code)
 	state_ast := impl.ConstructStateTree(&code_ast)
 	require.NoError(t, err)
 
@@ -522,6 +517,132 @@ func Test_Contract_State_Tree(t *testing.T) {
 	fmt.Println(impl.DisplayStateAST(code_ast, state_ast))
 }
 
+// Test ValidateAssumptions functionality
+func Test_Contract_Execution_Condition(t *testing.T) {
 
+	acc1, _ := accountFactory(105, "orange", 10) // buyer
+	acc2, _ := accountFactory(200, "location", "Lausanne") // seller
+	acc3, _ := accountFactory(200, "orange", 10) // buyer
+	acc4, _ := accountFactory(100, "apple", 0) // buyer
 
+	acc1_addr, acc2_addr := acc1.GetAddr().String(), acc2.GetAddr().String()
+	acc3_addr, acc4_addr := acc3.GetAddr().String(), acc4.GetAddr().String()
+
+	// construct world state storage
+	worldState_1 := storage.CreateSimpleKV()
+	worldState_1.Put(acc1_addr, acc1.GetState())
+	worldState_1.Put(acc2_addr, acc2.GetState())
+
+	worldState_2 := storage.CreateSimpleKV()
+	worldState_2.Put(acc3_addr, acc3.GetState())
+	worldState_2.Put(acc4_addr, acc4.GetState())
+	
+	// case 1: condition met
+	contract_code_1 := 
+	`
+		ASSUME buyer.balance > 100
+		ASSUME seller.location == "Lausanne"
+	`
+	contract_inst_1 := impl.NewContract(
+		"1", // contract_id
+		"Test assumption contract only", // contract_name
+		contract_code_1, // plain_code
+		"127.0.0.1", // proposer_addr
+		acc1_addr, // proposer_account
+		"127.0.0.2", // acceptor_addr
+		acc2_addr, // acceptor_account
+	)
+
+	// case 2: condition not met
+	contract_code_2 := 
+	`
+		ASSUME buyer.balance > 100
+		ASSUME seller.apple > 0
+	`
+	contract_inst_2 := impl.NewContract(
+		"1", // contract_id
+		"Test assumption contract only", // contract_name
+		contract_code_2, // plain_code
+		"127.0.0.1", // proposer_addr
+		acc3_addr, // proposer_account
+		"127.0.0.2", // acceptor_addr
+		acc4_addr, // acceptor_account
+	)
+
+	// validate the assumptions
+	valid_1, err_1 := contract_inst_1.ValidateAssumptions(worldState_1)
+	require.NoError(t, err_1)
+	require.Equal(t, true, valid_1)
+
+	valid_2, err_2 := contract_inst_2.ValidateAssumptions(worldState_2)
+	require.NoError(t, err_2)
+	require.Equal(t, false, valid_2)
+
+}
+
+// Test CollectActions functionality
+func Test_Contract_Execution_IfClause(t *testing.T) {
+	
+	acc1, _ := accountFactory(50, "orange", 10) // buyer
+	acc2, _ := accountFactory(200, "apple", 50) // seller
+	acc1_addr, acc2_addr := acc1.GetAddr().String(), acc2.GetAddr().String()
+
+	// construct world state storage
+	worldState := storage.CreateSimpleKV()
+	worldState.Put(acc1_addr, acc1.GetState())
+	worldState.Put(acc2_addr, acc2.GetState())
+
+	contract_code := 
+	`
+		IF buyer.balance > 10.5 THEN
+		 	buyer.transfer("seller_account", 1.25)
+			seller.send("buyer_account", "apple", 10)
+		IF buyer.balance > 100 THEN
+		 	buyer.transfer("seller_account", 100)
+			seller.send("seller_account", "product_id", 999)
+	`
+	contract_inst := impl.NewContract(
+		"1", // contract_id
+		"Test collect actions from if clauses", // contract_name
+		contract_code, // plain_code
+		"127.0.0.1", // proposer_addr
+		acc1_addr, // proposer_account
+		"127.0.0.2", // acceptor_addr
+		acc2_addr, // acceptor_account
+	)
+
+	expected_value1 := "seller_account"
+	expected_value2 := float64(1.25)
+	expected_value3 := "buyer_account"
+	expected_value4 := "apple"
+	expected_value5 := float64(10)
+
+	expected_actions := []parser.Action{
+		{
+			Role: "buyer",
+			Action: "transfer",
+			Params: []*parser.Value{
+				{String: &expected_value1, Number: nil},
+				{String: nil, Number: &expected_value2},
+			},
+		},
+		{
+			Role: "seller",
+			Action: "send",
+			Params: []*parser.Value{
+				{String: &expected_value3, Number: nil},
+				{String: &expected_value4, Number: nil},
+				{String: nil, Number: &expected_value5},
+			},
+		},
+	}
+
+	actions, err := contract_inst.CollectActions(worldState)
+	require.NoError(t, err)
+	require.Equal(t, expected_actions, actions)
+	// fmt.Println(actions)
+	// fmt.Println(*actions[0].Params[0].String)
+	// fmt.Println(*actions[0].Params[1].Number)
+
+}
 
