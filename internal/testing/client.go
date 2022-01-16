@@ -17,3 +17,4 @@ func NewClient(t *testing.T, opts ...Option) *client.Client {
 	cli := client.NewClient(fullNodeConf, peerConf, Address)
 	return &cli
 }
+
