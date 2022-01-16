@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"crypto/sha1"
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
@@ -8,6 +9,7 @@ import (
 	z "go.dedis.ch/cs438/internal/testing"
 	"go.dedis.ch/cs438/registry/standard"
 	"go.dedis.ch/cs438/transport/channel"
+	"math/big"
 	"sort"
 	"testing"
 	"time"
@@ -19,7 +21,7 @@ import (
 func TestSimpleScenario(t *testing.T) {
 	//var kvFactory storage.KVFactory = storage.CreateSimpleKV
 	transp := channel.NewTransport()
-	nodeNum := 3
+	nodeNum := 10
 	bitNum := 7
 	nodes := make([]client.Client, nodeNum)
 	for i := 0; i < nodeNum; i++ {
@@ -62,12 +64,12 @@ func TestSimpleScenario(t *testing.T) {
 	for i := 0; i < nodeNum; i++ {
 		successor := nodes[i].ChordNode.GetSuccessor()
 		expect := nodes[(i + 1) % nodeNum].ChordNode.GetChordId()
-		require.Equal(t, expect, successor)
+		require.Equal(t, expect, HashKey(successor, uint(bitNum)))
 	}
 	for i := 0; i < nodeNum; i++ {
 		predecessor := nodes[i].ChordNode.GetPredecessor()
 		expect := nodes[(i + nodeNum - 1) % nodeNum].ChordNode.GetChordId()
-		require.Equal(t, expect, predecessor)
+		require.Equal(t, expect, HashKey(predecessor, uint(bitNum)))
 	}
 
 	// check fingerTable
@@ -83,6 +85,9 @@ func TestSimpleScenario(t *testing.T) {
 					break
 				}
 			}
+			fmt.Println("________________________")
+			fmt.Println(expect)
+			fmt.Println(fingerTable[j])
 			require.Equal(t, expect, fingerTable[j])
 		}
 	}
@@ -100,4 +105,15 @@ func between(id uint, left uint, right uint) bool {
 	} else {
 		return false
 	}
+}
+
+func HashKey(key string, ChordBits uint) uint {
+	h := sha1.New()
+	if _, err := h.Write([]byte(key)); err != nil {
+		return 0
+	}
+	val := h.Sum(nil)
+	valInt := (&big.Int{}).SetBytes(val)
+
+	return uint(valInt.Uint64()) % (1 << ChordBits)
 }

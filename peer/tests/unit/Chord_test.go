@@ -20,9 +20,15 @@ type NodeWarp struct {
 func Test_Chord_twoPeers_createSystem(t *testing.T) {
 	transp := channel.NewTransport()
 
-	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithChordBits(7), z.WithStabilizeInterval(2 * time.Second))
+	node1 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0",
+		z.WithChordBits(7),
+		z.WithStabilizeInterval(2 * time.Second),
+		z.WithHeartbeat(time.Millisecond*500))
 	defer node1.Stop()
-	node2 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0", z.WithChordBits(7), z.WithStabilizeInterval(2 * time.Second))
+	node2 := z.NewTestNode(t, peerFac, transp, "127.0.0.1:0",
+		z.WithChordBits(7),
+		z.WithStabilizeInterval(2 * time.Second),
+		z.WithHeartbeat(time.Millisecond*500))
 	defer node2.Stop()
 	// initialize routing table
 	node1.AddPeer(node2.GetAddr())
