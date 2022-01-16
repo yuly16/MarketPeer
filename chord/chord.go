@@ -327,7 +327,6 @@ func (c *Chord) Get(key uint) (interface{}, bool, error) {
 
 func (c *Chord) Put(key uint, data interface{}) error {
 	dest, err := c.findSuccessor(key)
-	fmt.Printf("dest is %s", dest)
 	if err != nil {
 		return err
 	}

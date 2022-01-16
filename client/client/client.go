@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/json"
 	"go.dedis.ch/cs438/blockchain"
 	"go.dedis.ch/cs438/chord"
 	"go.dedis.ch/cs438/peer"
@@ -49,6 +50,9 @@ func (c *Client) StoreProduct(key uint, product Product) error {
 }
 
 func (c *Client) ReadProduct(key uint) (Product, bool) {
-	product, ok, _ := c.ChordNode.Get(key)
-	return product.(Product), ok
+	value, ok, _ := c.ChordNode.Get(key)
+	valueBytes, _ := json.Marshal(value)
+	product := Product{}
+	json.Unmarshal(valueBytes, &product)
+	return product, ok
 }

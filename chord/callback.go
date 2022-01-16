@@ -158,7 +158,6 @@ func (c *Chord) ChordTransferKeyCallback(msg types.Message, pkt transport.Packet
 
 func (c *Chord) ChordInsertKVCallback(msg types.Message, pkt transport.Packet) error {
 	kvMsg := msg.(*types.ChordInsertKVMessage)
-	fmt.Printf("receive %s", kvMsg.Key)
 	c.blockStore.put(kvMsg.Key, kvMsg.Value)
 	return nil
 }

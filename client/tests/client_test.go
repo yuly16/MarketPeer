@@ -131,22 +131,51 @@ func TestProductStorage(t *testing.T) {
 	fmt.Println("chord starts...")
 	time.Sleep(120 * time.Second)
 	fmt.Println("chord ends")
+
+
 	orange := client.Product{
 		Name: "orange",
 		Owner: nodes[0].Address,
 		Stock: 1000,
 	}
+	apple := client.Product{
+		Name: "apple",
+		Owner: nodes[1].Address,
+		Stock: 400,
+	}
+	banana := client.Product{
+		Name: "banana",
+		Owner: nodes[0].Address,
+		Stock: 600,
+	}
+
 	orange_key := HashKey(orange.Name, uint(bitNum))
+	apple_key := HashKey(apple.Name, uint(bitNum))
+	banana_key := HashKey(banana.Name, uint(bitNum))
 	clientNode := nodes[0]
 	fmt.Println("client stores a product")
 	err := clientNode.StoreProduct(orange_key, orange)
 	require.NoError(t, err)
+	err1 := clientNode.StoreProduct(apple_key, apple)
+	require.NoError(t, err)
+	err2 := clientNode.StoreProduct(banana_key, banana)
+	require.NoError(t, err)
+	require.NoError(t, err1)
+	require.NoError(t, err2)
+
 	time.Sleep(time.Second * 3)
 	fmt.Println("client reads a product")
 	actualOrange, ok := clientNode.ReadProduct(orange_key)
 	require.Equal(t, true, ok)
 	require.Equal(t, orange, actualOrange)
-	time.Sleep(time.Second * 1000)
+
+	actualApple, ok := clientNode.ReadProduct(apple_key)
+	require.Equal(t, true, ok)
+	require.Equal(t, apple_key, actualApple)
+
+	actualBanana, ok := clientNode.ReadProduct(banana_key)
+	require.Equal(t, true, ok)
+	require.Equal(t, banana, actualBanana)
 }
 
 
