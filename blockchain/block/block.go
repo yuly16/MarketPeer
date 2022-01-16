@@ -61,7 +61,7 @@ func (bh *BlockHeader) hash() []byte {
 
 type Block struct {
 	Header BlockHeader
-	State  storage.KV // addr -> addr_state. addr_state is json_marshaled
+	State  storage.KV // addr -> *addr_state.
 	//Transactions storage.KV
 	Transactions []*transaction.SignedTransaction
 	Receipts     storage.KV

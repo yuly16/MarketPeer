@@ -1,6 +1,8 @@
 package miner
 
 import (
+	"fmt"
+	"github.com/rs/zerolog"
 	"go.dedis.ch/cs438/blockchain/account"
 	"go.dedis.ch/cs438/blockchain/block"
 	"go.dedis.ch/cs438/transport"
@@ -64,6 +66,43 @@ func (m *Miner) BlockMsgCallback(msg types.Message, pkt transport.Packet) error 
 	logger.Info().Msgf("receive block msg: %s", blockMsg.String())
 
 	m.blockCh <- &blockMsg.Block
+
+	return nil
+}
+
+func (m *Miner) SyncMsgCallback(msg types.Message, pkt transport.Packet) error {
+	logger := m.logger.With().Str("callback", "SyncAccount").Logger().Level(zerolog.ErrorLevel)
+
+	syncMsg := msg.(*types.SyncAccountMessage)
+	addr := syncMsg.Addr
+	logger.Info().Msgf("receive sync account msg: %s", syncMsg.String())
+	// fetch latest state of this addr
+	worldState, _, err := m.chain.LatestWorldState()
+	if err != nil {
+		err = fmt.Errorf("sync msg error: %w", err)
+		logger.Err(err).Send()
+		return err
+	}
+	v, err := worldState.Get(addr.String())
+	if err != nil {
+		err = fmt.Errorf("sync msg error: %w", err)
+		logger.Err(err).Send()
+		return err
+	}
+	state, ok := v.(*account.State)
+	if !ok {
+		err = fmt.Errorf("account state=%s cannot casted to *State", v)
+		logger.Err(err).Send()
+		return err
+	}
+
+	reply := &types.SyncAccountReplyMessage{Timestamp: syncMsg.Timestamp, State: *state}
+	if err = m.messaging.Unicast(syncMsg.NetworkAddr, reply); err != nil {
+		err = fmt.Errorf("sync msg error: %w", err)
+		logger.Err(err).Send()
+		return err
+	}
+	logger.Info().Msgf("send back sync reply=%s to %s", reply.String(), syncMsg.NetworkAddr)
 
 	return nil
 }

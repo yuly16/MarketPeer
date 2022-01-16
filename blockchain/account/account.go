@@ -20,6 +20,10 @@ func (a *Account) GetState() *State {
 	return a.state
 }
 
+func (a *Account) SetState(state *State) {
+	a.state = state
+}
+
 func (a *Account) String() string {
 	return fmt.Sprintf("{addr: %s, state: %s}", a.addr, a.state)
 }

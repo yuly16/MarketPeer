@@ -95,7 +95,7 @@ func (m *Messager) statusReportDaemon(interval time.Duration) {
 		}
 
 		randNei := m.randNeigh()
-		m.Info().Msgf("status report once to %s", randNei)
+		m.Trace().Msgf("status report once to %s", randNei)
 		if err = m.Unicast(randNei, statusMsg); err != nil {
 			m.Err(err).Msg("status report failed")
 			continue
@@ -552,4 +552,8 @@ func (m *Messager) getNeisExcept(excepts ...string) []string {
 
 func (m *Messager) getNeis() []string {
 	return m.getNeisExcept(NONEIGHBOR)
+}
+
+func (m *Messager) GetNeighbors() []string {
+	return m.getNeis()
 }

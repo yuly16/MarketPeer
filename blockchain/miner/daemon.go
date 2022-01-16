@@ -122,6 +122,7 @@ func (m *Miner) verifyBlockd() {
 			continue
 		}
 		// then try to append, the append will tell us if it can append
+		// FIXME: if the block is too new, then we need to sync with this miner!
 		parent, err := m.chain.TryAppend(newBlock)
 		if err != nil {
 			m.logger.Err(err).Send()

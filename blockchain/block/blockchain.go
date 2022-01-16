@@ -67,7 +67,12 @@ func (bc *BlockChain) TryAppend(block *Block) (*Block, error) {
 	// too new
 	if block.Header.Number-endsNumber >= 2 {
 		return nil, fmt.Errorf("block too new(number=%d), cannot connect to ends(number=%d), block=%s",
-			block.Header.Number, endsNumber, block)
+			block.Header.Number, endsNumber, block.String())
+	}
+
+	if block.Header.Number-endsNumber <= 0 {
+		return nil, fmt.Errorf("block number(%d) not valid, cannot connect to ends(number=%d), block=%s",
+			block.Header.Number, endsNumber, block.String())
 	}
 
 	// TODO: now we only allow len(ends) = 0
@@ -91,7 +96,9 @@ func (bc *BlockChain) TryAppend(block *Block) (*Block, error) {
 			return b, nil
 		}
 	}
-	return nil, fmt.Errorf("block too old, cannot connect to ends, block=%s", block)
+	return nil, fmt.Errorf("block(parentHash=%s) cannot be connected to ends(%s), block=%s",
+		block.Hash()[:6]+"...",
+		bc.ends[0].Hash()[:6]+"...", block.String())
 }
 
 func (bc *BlockChain) Append(block *Block) error {
@@ -133,7 +140,7 @@ func (bc *BlockChain) Append(block *Block) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("block too old, cannot connect to ends, block=%s", block)
+	return fmt.Errorf("block too old, cannot connect to ends, block=%s", block.String())
 }
 
 func (bc *BlockChain) HashBytes() []byte {
