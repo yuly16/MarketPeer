@@ -3,6 +3,7 @@ package tests
 import (
 	"encoding/json"
 	"fmt"
+	"go.dedis.ch/cs438/blockchain/transaction"
 	"testing"
 	"time"
 
@@ -60,20 +61,21 @@ func TestBlockChainString(t *testing.T) {
 	var kvFactory storage.KVFactory = storage.CreateSimpleKV
 
 	bb := block.NewBlockBuilder(kvFactory).
-		SetParentHash("ffff").
+		SetParentHash(block.DUMMY_PARENT_HASH).
 		SetNonce(0).
 		SetNumber(0).
 		SetState(storage.NewSimpleKV()).
-		SetTxns(storage.NewSimpleKV()).
+		SetTxns(make([]*transaction.SignedTransaction, 0)).
 		SetReceipts(storage.NewSimpleKV()).
 		SetBeneficiary(*account.NewAddress([8]byte{}))
 	b := bb.Build()
 
-	bc := block.NewBlockChain()
+	bc := block.NewBlockChainWithGenesis(b)
+	b = b.NextBlockBuilder(kvFactory, account.NewAddress([8]byte{})).Build()
 	bc.Append(b)
+	b = b.NextBlockBuilder(kvFactory, account.NewAddress([8]byte{})).Build()
 	bc.Append(b)
-	bc.Append(b)
-	fmt.Println(bc)
+	fmt.Println(bc.String())
 }
 
 func TestBlockChainVerify(t *testing.T) {
@@ -94,19 +96,20 @@ func TestBlockChainVerify(t *testing.T) {
 	defer fullNode1.Stop()
 
 	bb := block.NewBlockBuilder(kvFactory).
-		SetParentHash("ffff").
+		SetParentHash(block.DUMMY_PARENT_HASH).
 		SetNonce(1).
 		SetNumber(0).
 		SetState(storage.NewSimpleKV()).
-		SetTxns(storage.NewSimpleKV()).
+		SetTxns(make([]*transaction.SignedTransaction, 0)).
 		SetDifficulty(2).
 		SetReceipts(storage.NewSimpleKV()).
 		SetBeneficiary(*account.NewAddress([8]byte{}))
 	b := bb.Build()
 	//fullNode1.Test_submitTxn()
-	bc := block.NewBlockChain()
+	bc := block.NewBlockChainWithGenesis(b)
+	b = b.NextBlockBuilder(kvFactory, account.NewAddress([8]byte{})).Build()
 	bc.Append(b)
-	bc.Append(b)
+	b = b.NextBlockBuilder(kvFactory, account.NewAddress([8]byte{})).Build()
 	bc.Append(b)
 	fmt.Println(bc)
 	fullNode1.BroadcastBlock(*b)
