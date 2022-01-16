@@ -36,7 +36,7 @@ func Test_Chord_twoPeers_createSystem(t *testing.T) {
 	time.Sleep(4 * time.Second)
 	node1.Init(node2.GetAddr())
 	node2.Init(node1.GetAddr())
-	time.Sleep(600 * time.Second)
+	time.Sleep(20 * time.Second)
 	require.Equal(t, node1.GetPredecessor(), node2.GetChordId())
 	require.Equal(t, node2.GetPredecessor(), node1.GetChordId())
 	require.Equal(t, node1.GetSuccessor(), node2.GetChordId())
