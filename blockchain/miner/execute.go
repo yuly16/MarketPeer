@@ -20,14 +20,18 @@ func (m *Miner) doExecuteTxn(txn *transaction.SignedTransaction, worldState stor
 	// TODO: contract case
 	if txn.Txn.To.IsContract() {
 		return m.doContract(txn, worldState)
+	} else if txn.Txn.Type == transaction.CREATE_CONTRACT {
+		// create a transaction
+		return nil
+	} else {
+		// value transfer
+		err := m.doValueTransfer(txn, worldState)
+		if err != nil {
+			return fmt.Errorf("execute value transfer error: %w", err)
+		}
+		return nil
 	}
 
-	// value transfer
-	err := m.doValueTransfer(txn, worldState)
-	if err != nil {
-		return fmt.Errorf("execute value transfer error: %w", err)
-	}
-	return nil
 }
 
 func (m *Miner) doValueTransfer(txn *transaction.SignedTransaction, worldState storage.KV) error {

@@ -388,7 +388,7 @@ func Test_Chord_Peers_transferKey(t *testing.T) {
 	for i := 2; i < nodeNum; i++ {
 		require.NoError(t, nodes[i].node.Join(nodes[i-1].node.GetAddr()))
 	}
-
+	time.Sleep(time.Second * 120)
 	fmt.Println("getting...")
 	for i := 0; i < 1 << bitNum; i = i + 1 << 3 {
 		dest, err := nodes[0].node.LookupHashId(uint(i))
