@@ -654,7 +654,6 @@ func Test_Contract_Execution_IfClause(t *testing.T) {
 
 func Test_Contract_Execution_Network(t *testing.T) {
 	transp := channel.NewTransport()
-	
 	acc_buyer, pri_buyer := accountFactory(105, "apple", 5)
 	acc_seller, pri_seller := accountFactory(95, "apple", 10)
 

@@ -38,7 +38,6 @@ func (m *Miner) doExecuteTxn(txn *transaction.SignedTransaction, worldState stor
 		}
 		return nil
 	}
-
 }
 
 func (m *Miner) doValueTransfer(txn *transaction.SignedTransaction, worldState storage.KV) error {
@@ -98,7 +97,7 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 		return contract_state_err
 	}
 
-	contract_bytecode := contract_acc_state.Code
+	contract_bytecode := []byte(contract_acc_state.Code)
 	unmarshal_err := json.Unmarshal(contract_bytecode, &contract_inst)
 	if unmarshal_err != nil {
 		return fmt.Errorf("unmarshal contract byte code error: %w", unmarshal_err)

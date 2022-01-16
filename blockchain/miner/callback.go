@@ -38,7 +38,7 @@ func (m *Miner) BlockMsgCallback(msg types.Message, pkt transport.Packet) error 
 		accountState := account.NewStateBuilder(m.kvFactory)
 		accountState.SetNonce(uint(vv["Nonce"].(float64))).
 			SetBalance(uint(vv["Balance"].(float64))).
-			SetCode(vv["Code"].([]byte))
+			SetCode(vv["Code"].(string))
 
 		vvs, ok := vv["StorageRoot"].(map[string]interface{}) // vvs is serialized account.State.StorageRoot
 		if !ok {

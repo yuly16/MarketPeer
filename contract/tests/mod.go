@@ -20,7 +20,7 @@ var contractFactory = func(balance uint, bytecode []byte) (*account.Account, *ec
 	privateKey1, _ := crypto.GenerateKey()
 	// publicKey1 := &privateKey1.PublicKey
 	ac1 := account.NewContractBuilder([8]byte{0, 0, 0, 0, 0, 0, 0, 1}, 
-		storage.CreateSimpleKV).WithBalance(balance).WithCode(bytecode).Build()
+		storage.CreateSimpleKV).WithBalance(balance).WithCode(string(bytecode)).Build()
 	return ac1, privateKey1
 }
 

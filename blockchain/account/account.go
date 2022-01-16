@@ -63,8 +63,8 @@ func (ab *AccountBuilder) WithKV(key string, value interface{}) *AccountBuilder 
 	return ab
 }
 
-func (ab *AccountBuilder) WithCode(bytecode []byte) *AccountBuilder {
-	ab.state.SetCode(bytecode)
+func (ab *AccountBuilder) WithCode(code string) *AccountBuilder {
+	ab.state.SetCode(code)
 	return ab
 }
 
