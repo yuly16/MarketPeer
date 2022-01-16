@@ -295,8 +295,7 @@ func Test_Chord_Peers_lookup(t *testing.T) {
 // test 5 test transfer key simple test
 func Test_Chord_threePeers_transferKey(t *testing.T) {
 	transp := channel.NewTransport()
-	// this test is forbidden to use udp!
-	//transp := udp.NewUDP()
+
 	nodeNum := 3
 	bitNum := 7
 	ip2node := map[uint]NodeWarp{}
@@ -323,7 +322,7 @@ func Test_Chord_threePeers_transferKey(t *testing.T) {
 	nodes[1].node.Init(nodes[0].node.GetAddr())
 
 	fmt.Println("chord starts...")
-	time.Sleep(10 * time.Second)
+	time.Sleep(20 * time.Second)
 	fmt.Println("chord ends")
 
 	expect := map[uint]interface{}{100:"no", 112:"yes"}
@@ -331,7 +330,7 @@ func Test_Chord_threePeers_transferKey(t *testing.T) {
 	for k,v := range expect {
 		nodes[0].node.PutId(k,v)
 	}
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 8)
 
 	require.Equal(t, empty, nodes[0].node.GetChordStorage())
 	require.Equal(t, expect, nodes[1].node.GetChordStorage())
@@ -339,7 +338,7 @@ func Test_Chord_threePeers_transferKey(t *testing.T) {
 	for i := 2; i < nodeNum; i++ {
 		require.NoError(t, nodes[i].node.Join(nodes[i-1].node.GetAddr()))
 	}
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 20)
 	require.Equal(t, nodes[0].node.GetChordStorage(), empty)
 	require.Equal(t, nodes[1].node.GetChordStorage(), empty)
 	require.Equal(t, nodes[2].node.GetChordStorage(), expect)

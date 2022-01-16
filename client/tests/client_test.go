@@ -22,7 +22,7 @@ func TestSimpleScenario(t *testing.T) {
 	//var kvFactory storage.KVFactory = storage.CreateSimpleKV
 	transp := channel.NewTransport()
 	nodeNum := 10
-	bitNum := 7
+	bitNum := 12
 	nodes := make([]client.Client, nodeNum)
 	for i := 0; i < nodeNum; i++ {
 		sock, err := transp.CreateSocket("127.0.0.1:0")
