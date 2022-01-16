@@ -8,6 +8,8 @@ import (
 	"go.dedis.ch/cs438/blockchain/transaction"
 )
 
+// TODO: wallet sync the account state? submitTxn
+// Q: what if a transaction is stale? A: nonce field will handle it
 func (m *Miner) verifyTxn(txn *transaction.SignedTransaction, worldState storage.KV) error {
 	err := m.doVerifyTxn(txn, worldState)
 	if err != nil {
@@ -52,6 +54,6 @@ func (m *Miner) doVerifyTxn(txn *transaction.SignedTransaction, worldState stora
 		return fmt.Errorf("account balance=%d, cannot cover value=%d transfer",
 			accountState.Balance, txn.Txn.Value)
 	}
-	
+
 	return nil
 }

@@ -57,7 +57,6 @@ type Wallet struct {
 	privateKey PrivateKey
 }
 
-// TODO: use WalletBuilder to give more fine-grained control
 func NewWallet(conf WalletConf) *Wallet {
 	w := Wallet{}
 	w.messaging = conf.Messaging
@@ -86,13 +85,14 @@ func (w *Wallet) transferEpfer(dest account.Account, epfer int) {
 // wallet can submit a transaction
 // transaction is signed or not?
 // how is digital coin represented?
-func (w *Wallet) submitTxn(txn transaction.Transaction) {
+func (w *Wallet) SubmitTxn(txn transaction.Transaction) {
 	txnMessage := types.WalletTransactionMessage{Txn: w.signTxn(txn)}
-	
+
 	err := w.messaging.Broadcast(txnMessage)
 	if err != nil {
 		w.logger.Error().Msg("submitTxn: broadcast a transantion error. ")
 	}
+	w.logger.Info().Msgf(fmt.Sprintf("broadcast a txn:%s", txnMessage.Txn.String()))
 }
 
 func (w *Wallet) hash(data interface{}) []byte {
@@ -102,7 +102,7 @@ func (w *Wallet) hash(data interface{}) []byte {
 		return nil
 	}
 	if _, err := h.Write(bytes); err != nil {
-	return nil
+		return nil
 	}
 	val := h.Sum(nil)
 	return val
@@ -127,14 +127,13 @@ func (w *Wallet) signTxn(txn transaction.Transaction) transaction.SignedTransact
 }
 
 func (w *Wallet) registerCallbacks() {
-	w.messaging.RegisterMessageCallback(types.WalletTransactionMessage{}, w.WalletTxnMsgCallback)
+	//w.messaging.RegisterMessageCallback(types.WalletTransactionMessage{}, w.WalletTxnMsgCallback)
 
 }
 
 //--------------The following code is just for debug -------------------//
 
 func (w *Wallet) Test_submitTxn() {
-	txn := transaction.NewTransaction(1,2, *w.account.GetAddr(), *w.account.GetAddr())
-	w.submitTxn(txn)
+	txn := transaction.NewTransaction(1, 2, *w.account.GetAddr(), *w.account.GetAddr())
+	w.SubmitTxn(txn)
 }
-

@@ -15,7 +15,6 @@ func satisfyPrefixZeros(hash []byte, zeros int) bool {
 	return true
 }
 
-// TODO: is it appropriate?
 func difficultyToZeros(difficulty int) int {
 	return difficulty
 }

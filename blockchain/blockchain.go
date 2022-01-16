@@ -33,8 +33,10 @@ type FullNodeConf struct {
 
 // FullNode is a Wallet as well as a Miner
 type FullNode struct {
-	logger   zerolog.Logger
-	messager messaging.Messager
+	logger      zerolog.Logger
+	messager    messaging.Messager
+	networkAddr string
+	accountAddr *account.Address
 	*wallet.Wallet
 	*miner.Miner
 
@@ -50,11 +52,24 @@ func NewFullNode(conf *FullNodeConf) *FullNode {
 		Addr: conf.Addr, Messaging: conf.Messaging,
 		PrivateKey: conf.PrivateKey, PublicKey: conf.PublicKey, KVFactory: conf.KVFactory, Account: conf.Account})
 
-	f := &FullNode{Wallet: w, Miner: m, messager: conf.Messaging}
+	f := &FullNode{Wallet: w, Miner: m, messager: conf.Messaging,
+		networkAddr: conf.Addr, accountAddr: conf.Account.GetAddr()}
 	f.logger = logging.RootLogger.With().Str("FullNode", fmt.Sprintf("%s", conf.Addr)).Logger()
 	f.logger.Info().Msg("created")
 	return f
 }
+
+func (f *FullNode) AddPeer(nodes ...*FullNode) {
+	addrs := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		addrs = append(addrs, node.GetAddr())
+	}
+	f.messager.AddPeer(addrs...)
+}
+
+func (f *FullNode) GetAddr() string { return f.networkAddr }
+
+func (f *FullNode) GetAccountAddr() *account.Address { return f.accountAddr }
 
 func (f *FullNode) Start() {
 	f.logger.Info().Msg("full node starting...")
@@ -68,6 +83,10 @@ func (f *FullNode) Stop() {
 	f.messager.Stop()
 	f.Miner.Stop()
 	f.Wallet.Stop()
+}
+
+func (f *FullNode) GetChain() *block.BlockChain {
+	return f.Miner.GetChain()
 }
 
 type BlockChain interface {

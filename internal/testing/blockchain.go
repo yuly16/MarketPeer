@@ -47,6 +47,7 @@ func buildFullNodeConf(temp *configTemplate) *blockchain.FullNodeConf {
 	conf.Messaging = messaging.NewRegistryMessager(conf.Addr, conf.PeerMessager, temp.registry)
 	conf.Bootstrap = temp.blockchain
 	conf.BlockTransactions = temp.blocktxns
+	conf.KVFactory = temp.kvFactory
 	return conf
 }
 
