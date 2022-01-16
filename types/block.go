@@ -10,6 +10,7 @@ import (
 
 // NewEmpty implements types.Message.
 func (c BlockMessage) NewEmpty() Message {
+	// FIXME: merkle tree will not work here
 	return &BlockMessage{Block: *block.NewBlockBuilder(storage.CreateSimpleKV).Build()}
 }
 

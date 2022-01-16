@@ -60,7 +60,8 @@ type Transaction struct {
 }
 
 func (t *Transaction) String() string {
-	return fmt.Sprintf("{nonce: %d, value: %d, v: %s, r: %s, s:%s}", t.Nonce, t.Value, t.V, t.R, t.S)
+	return fmt.Sprintf("{nonce: %d, value: %d, from: %s, to: %s}", t.Nonce, t.Value, t.From.String()[:6]+"...",
+		t.To.String()[:6]+"...")
 }
 
 func (t *Transaction) Print() {
@@ -74,7 +75,11 @@ type SignedTransaction struct {
 	Signature []byte
 }
 
+func (t *SignedTransaction) HashBytes() []byte {
+	return hash(t)
+}
+
 func (t *SignedTransaction) String() string {
 	return fmt.Sprintf("{txn=%s, digest=%s, sig=%s}", t.Txn.String(),
-		hex.EncodeToString(t.Digest), hex.EncodeToString(t.Signature))
+		hex.EncodeToString(t.Digest)[:6]+"...", hex.EncodeToString(t.Signature)[:6]+"...")
 }

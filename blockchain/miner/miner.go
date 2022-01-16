@@ -10,6 +10,7 @@ import (
 	"go.dedis.ch/cs438/blockchain/transaction"
 	"go.dedis.ch/cs438/logging"
 	"go.dedis.ch/cs438/types"
+	"sync"
 	"sync/atomic"
 )
 
@@ -38,7 +39,9 @@ type Miner struct {
 
 	chain *block.BlockChain
 
+	mu          sync.Mutex // sync txnd and blockd
 	txnCh       chan *transaction.SignedTransaction
+	blockCh     chan *block.Block
 	blocktxns   int               // how many transactions in a block
 	kvFactory   storage.KVFactory // kv factory to create Blocks
 	accountAddr *account.Address
@@ -53,6 +56,7 @@ func NewMiner(conf MinerConf) *Miner {
 	m.addr = conf.Addr
 	m.chain = conf.Bootstrap
 	m.txnCh = make(chan *transaction.SignedTransaction, 100)
+	m.blockCh = make(chan *block.Block, 100)
 	m.blocktxns = conf.BlockTransactions
 	m.kvFactory = conf.KVFactory
 	m.accountAddr = conf.AccountAddr
@@ -82,12 +86,18 @@ func (m *Miner) isKilled() bool {
 	return atomic.LoadInt32(&m.stat) == KILL
 }
 
+func (m *Miner) GetChain() *block.BlockChain {
+	return m.chain
+}
+
 func (m *Miner) submitBlock() {}
 
 func (m *Miner) registerCallbacks() {
+	m.messaging.RegisterMessageCallback(types.WalletTransactionMessage{}, m.WalletTxnMsgCallback)
 	m.messaging.RegisterMessageCallback(types.BlockMessage{}, m.BlockMsgCallback)
-}
+	m.messaging.RegisterMessageCallback(types.SyncAccountMessage{}, m.SyncMsgCallback)
 
+}
 
 // ---------------------------------the code is just for testing------------------------
 

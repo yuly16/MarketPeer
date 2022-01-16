@@ -1,7 +1,10 @@
 package account
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strconv"
 
 	"go.dedis.ch/cs438/blockchain/storage"
 )
@@ -15,6 +18,7 @@ type State struct {
 }
 
 type StateBuilder struct {
+	nonce       uint
 	balance     uint
 	codeHash	[]byte
 	storageRoot storage.KV
@@ -22,6 +26,11 @@ type StateBuilder struct {
 
 func NewStateBuilder(kvFactory storage.KVFactory) *StateBuilder {
 	return &StateBuilder{storageRoot: kvFactory()}
+}
+
+func (sb *StateBuilder) SetNonce(nonce uint) *StateBuilder {
+	sb.nonce = nonce
+	return sb
 }
 
 func (sb *StateBuilder) SetBalance(balance uint) *StateBuilder {
@@ -42,7 +51,7 @@ func (sb *StateBuilder) SetCode(bytecode []byte) *StateBuilder {
 }
 func (sb *StateBuilder) Build() *State {
 	s := State{
-		Nonce:       0,
+		Nonce:       sb.nonce,
 		Balance:     sb.balance,
 		StorageRoot: sb.storageRoot,
 		CodeHash: 	 sb.codeHash,
@@ -64,7 +73,23 @@ func (s *State) StorageHash() string {
 	return s.StorageRoot.Hash()
 }
 
+func (s *State) Hash() string {
+	h := sha256.New()
+	h.Write([]byte(strconv.Itoa(int(s.Balance))))
+	h.Write([]byte(strconv.Itoa(int(s.Nonce))))
+	h.Write([]byte(s.Code))
+	h.Write([]byte(s.StorageHash()))
+	return hex.EncodeToString(h.Sum(nil))
+
+}
+
+func (s *State) Equal(other *State) bool {
+	return s.Code == other.Code &&
+		s.Nonce == other.Nonce && s.Balance == other.Balance && s.StorageRoot.Hash() == other.StorageRoot.Hash()
+
+}
+
 func (s *State) String() string {
-	return fmt.Sprintf("{nonce=%d, balance=%d, storageHash=%s, codeHash=%s}",
-		s.Nonce, s.Balance, s.StorageHash()[:8]+"...", s.CodeHash)
+	return fmt.Sprintf("{nonce=%d, balance=%d, storageHash=%s, code=%s}",
+		s.Nonce, s.Balance, s.StorageHash()[:8]+"...", s.Code)
 }

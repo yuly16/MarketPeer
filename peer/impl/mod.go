@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	chord2 "go.dedis.ch/cs438/chord"
 	"io"
 	"math"
 	"math/rand"
@@ -68,7 +69,7 @@ func NewPeer(conf peer.Configuration) peer.Peer {
 	}, node.Messager, conf)
 	// node.Messaging = NewMessager(conf)
 
-	node.chord = NewChord(node.Messager, conf)
+	node.chord = chord2.NewChord(node.Messager, conf)
 
 	if node.conf.AckTimeout == 0 {
 		node.conf.AckTimeout = math.MaxInt64
@@ -93,7 +94,7 @@ type node struct {
 
 	consensus Consensus
 
-	chord *Chord
+	chord *chord2.Chord
 	// storage
 	blob   storage.Store
 	naming storage.Store
@@ -162,77 +163,79 @@ func (n *node) Stop() error {
 }
 
 func (n *node) Store(key string) (err error) {
-	n.chord.insertTable()
-	n.chord.readTable()
 	return nil
 }
 
 func (n *node) Join(member string) (err error) {
-	return n.chord.join(member)
+	return n.chord.Join(member)
 }
 
 func (n *node) Init(member string) {
-	n.chord.init(member)
+	n.chord.Init(member)
 }
 
 func (n *node) Lookup(key string) (string, error) {
-	fmt.Printf("hash key of %s is %d\n", key, n.chord.hashKey(key))
-	destination, err := n.chord.findSuccessor(n.chord.hashKey(key))
-	fmt.Printf("dest is %d\n", n.chord.hashKey(destination))
+	fmt.Printf("hash key of %s is %d\n", key, n.chord.HashKey(key))
+	destination, err := n.chord.Lookup(n.chord.HashKey(key))
+	fmt.Printf("dest is %d\n", n.chord.HashKey(destination))
 	return destination, err
 }
 
 func (n *node) LookupHashId(key uint) (uint, error) {
-	destination, err := n.chord.findSuccessor(key)
-	return n.chord.hashKey(destination), err
+	destination, err := n.chord.Lookup(key)
+	return n.chord.HashKey(destination), err
 }
 
-func (n *node) Get(key string) (string, bool) {
-	// TODO: implemented when blockchain and smart contract finishes
-	return "", true
+func (n *node) Get(key string) (interface{}, bool) {
+	value, exist, _ :=  n.chord.Get(n.chord.HashKey(key))
+	return value, exist
 }
 
-func (n *node) Put(key string, data uint) {
-	// TODO: implemented when blockchain and smart contract finishes
+func (n *node) Put(key string, data interface{}) {
+	n.chord.Put(n.chord.HashKey(key), data)
 }
 
-func (n *node) GetId(key uint) (uint, bool) {
-	return n.chord.blockStore.get(key)
+func (n *node) GetId(key uint) (interface{}, bool) {
+	value, exist, _ := n.chord.Get(key)
+	return value, exist
 }
 
-func (n *node) PutId(key uint, data uint) {
-	n.chord.blockStore.put(key, data)
+func (n *node) PutId(key uint, data interface{}) {
+	n.chord.Put(key, data)
 }
 
 func (n *node) PrintInfo() uint {
 	fmt.Println("--------------------------------------------------")
 	fmt.Printf("Node %d: predecessor: %d, successor: %d\n",
-		n.chord.hashKey(n.conf.Socket.GetAddress()),
-		n.chord.hashKey(n.chord.predecessor.read()),
-		n.chord.hashKey(n.chord.successor.read()))
+		n.chord.HashKey(n.conf.Socket.GetAddress()),
+		n.chord.HashKey(n.chord.GetPredecessor()),
+		n.chord.HashKey(n.chord.GetSuccessor()))
 
-	return n.chord.chordId
+	return n.chord.GetChordId()
 }
 
 // for test
 func (n *node) GetFingerTable() []uint {
 	res := make([]uint, n.conf.ChordBits)
 	for i := 0; i < int(n.conf.ChordBits); i++ {
-		str, _ := n.chord.fingerTable.load(i)
-		res[i] = n.chord.hashKey(str)
+		str, _ := n.chord.GetFingerTableItem(i)
+		res[i] = n.chord.HashKey(str)
 	}
 	return res
 }
 func (n *node) GetChordId() uint {
-	return n.chord.chordId
+	return n.chord.GetChordId()
 }
 func (n *node) GetPredecessor() uint {
-	return n.chord.hashKey(n.chord.predecessor.read())
+	return n.chord.HashKey(n.chord.GetPredecessor())
 }
 func (n *node) GetSuccessor() uint {
-	return n.chord.hashKey(n.chord.successor.read())
+	return n.chord.HashKey(n.chord.GetSuccessor())
 }
 
+func (n* node) GetChordStorage() map[uint]interface{} {
+	return n.chord.OutputStorage()
+}
 func (n *node) searchAllFromNei(reg regexp.Regexp, budget uint, timeout time.Duration) ([]string, error) {
 	if !n.hasNeighbor() {
 		return []string{}, nil

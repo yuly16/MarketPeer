@@ -116,3 +116,96 @@ func (c ChordNotifyMessage) String() string {
 func (c ChordNotifyMessage) HTML() string {
 	return c.String()
 }
+
+
+// -----------------------------------------------------------------------------
+// ChordTransferKeyMessage
+
+// NewEmpty implements types.Message.
+func (c ChordTransferKeyMessage) NewEmpty() Message {
+	return &ChordTransferKeyMessage{}
+}
+
+// Name implements types.Message.
+func (c ChordTransferKeyMessage) Name() string {
+	return "chordtransferkeymessage"
+}
+
+// String implements types.Message.
+func (c ChordTransferKeyMessage) String() string {
+	return fmt.Sprintf("{ChordTransferKeyMessage}")
+}
+
+// HTML implements types.Message.
+func (c ChordTransferKeyMessage) HTML() string {
+	return c.String()
+}
+
+// -----------------------------------------------------------------------------
+// ChordTransferKeyMessage
+
+// NewEmpty implements types.Message.
+func (c ChordInsertKVMessage) NewEmpty() Message {
+	return &ChordInsertKVMessage{}
+}
+
+// Name implements types.Message.
+func (c ChordInsertKVMessage) Name() string {
+	return "chordinsertkvmessage"
+}
+
+// String implements types.Message.
+func (c ChordInsertKVMessage) String() string {
+	return fmt.Sprintf("{ChordInsertKVMessage}")
+}
+
+// HTML implements types.Message.
+func (c ChordInsertKVMessage) HTML() string {
+	return c.String()
+}
+
+// -----------------------------------------------------------------------------
+// ChordTransferKeyMessage
+
+// NewEmpty implements types.Message.
+func (c ChordAskKVMessage) NewEmpty() Message {
+	return &ChordAskKVMessage{}
+}
+
+// Name implements types.Message.
+func (c ChordAskKVMessage) Name() string {
+	return "chordaskkvmessage"
+}
+
+// String implements types.Message.
+func (c ChordAskKVMessage) String() string {
+	return fmt.Sprintf("{ChordAskKVMessage}")
+}
+
+// HTML implements types.Message.
+func (c ChordAskKVMessage) HTML() string {
+	return c.String()
+}
+
+// -----------------------------------------------------------------------------
+// ChordTransferKeyMessage
+
+// NewEmpty implements types.Message.
+func (c ChordGiveKVMessage) NewEmpty() Message {
+	return &ChordGiveKVMessage{}
+}
+
+// Name implements types.Message.
+func (c ChordGiveKVMessage) Name() string {
+	return "chordgivekvmessage"
+}
+
+// String implements types.Message.
+func (c ChordGiveKVMessage) String() string {
+	return fmt.Sprintf("{ChordGiveKVMessage}")
+}
+
+// HTML implements types.Message.
+func (c ChordGiveKVMessage) HTML() string {
+	return c.String()
+}

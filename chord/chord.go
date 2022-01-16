@@ -1,4 +1,4 @@
-package impl
+package chord
 
 import (
 	"crypto/sha1"
@@ -7,10 +7,10 @@ import (
 	"github.com/rs/zerolog/log"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/registry"
-	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 	"math/big"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -19,7 +19,7 @@ import (
 
 
 func NewChord(messager peer.Messaging, conf peer.Configuration) *Chord {
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	zerolog.SetGlobalLevel(zerolog.ErrorLevel)
 
 	chordInstance := Chord{}
 	chordInstance.conf = conf
@@ -29,7 +29,7 @@ func NewChord(messager peer.Messaging, conf peer.Configuration) *Chord {
 	chordInstance.predecessor = MutexString{data: ""}
 	chordInstance.successor = MutexString{data: ""}
 
-	chordId := chordInstance.hashKey(conf.Socket.GetAddress())
+	chordId := chordInstance.HashKey(conf.Socket.GetAddress())
 	fmt.Printf("%s: %d\n", conf.Socket.GetAddress(), chordId)
 	chordInstance.chordId = chordId
 
@@ -40,32 +40,20 @@ func NewChord(messager peer.Messaging, conf peer.Configuration) *Chord {
 	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordAskPredecessorMessage{}, chordInstance.ChordAskPredecessorCallback)
 	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordReplyPredecessorMessage{}, chordInstance.ChordReplyPredecessorCallback)
 	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordNotifyMessage{}, chordInstance.ChordNotifyCallback)
+	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordTransferKeyMessage{}, chordInstance.ChordTransferKeyCallback)
+	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordInsertKVMessage{}, chordInstance.ChordInsertKVCallback)
+	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordAskKVMessage{}, chordInstance.ChordAskKVCallback)
+	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordGiveKVMessage{}, chordInstance.ChordGiveKVCallback)
 
 	chordInstance.findSuccessorCh = make(map[uint]chan types.ChordFindSuccessorReplyMessage)
 	chordInstance.askPredecessorCh = make(chan types.ChordReplyPredecessorMessage, 1)
+	chordInstance.acquireKVCh = make(map[uint]chan types.ChordGiveKVMessage)
 
-	chordInstance.blockStore.data = make(map[uint]uint)
+	chordInstance.blockStore.data = make(map[uint]interface{})
 
 	return &chordInstance
 }
 
-type ChordStorage struct {
-	sync.Mutex
-	data map[uint]uint
-}
-
-func (c *ChordStorage) get(key uint) (uint, bool) {
-	c.Lock()
-	defer c.Unlock()
-	data, ok := c.data[key]
-	return data, ok
-}
-
-func (c *ChordStorage) put(key uint, data uint) {
-	c.Lock()
-	defer c.Unlock()
-	c.data[key] = data
-}
 
 //func (c *ChordStorage)
 type Chord struct {
@@ -75,23 +63,27 @@ type Chord struct {
 	conf                peer.Configuration
 	msgRegistry         registry.Registry
 
-	chordId             uint
-	successor           MutexString
-	predecessor         MutexString
+	chordId     		uint
+	successor   		MutexString
+	predecessor 		MutexString
 
 	chMutex             sync.Mutex
 	findSuccessorCh     map[uint]chan types.ChordFindSuccessorReplyMessage
 	askPredecessorCh    chan types.ChordReplyPredecessorMessage
+	acquireKVCh     map[uint]chan types.ChordGiveKVMessage
+
 	fingerTable         *FingerTable
 
 	blockStore          ChordStorage
+
+	stat                int32
 }
 
 //The identifier length m must
 //be large enough to make the probability of two nodes or keys
 //hashing to the same identifier negligible.
 
-func (c *Chord) hashKey(key string) uint {
+func (c *Chord) HashKey(key string) uint {
 	h := sha1.New()
 	if _, err := h.Write([]byte(key)); err != nil {
 		return 0
@@ -111,7 +103,7 @@ func (c *Chord) closestPrecedingNode(id uint) (string, error) {
 		if nodeAddr == "" {
 			continue
 		}
-		if between(c.hashKey(nodeAddr), c.chordId, id) {
+		if between(c.HashKey(nodeAddr), c.chordId, id) {
 			return nodeAddr, nil
 		}
 	}
@@ -127,7 +119,7 @@ func (c *Chord) findSuccessor(id uint) (string, error) {
 	// FIXME: not sure about this. The paper doesn't mention it
 	if id == c.chordId ||
 		(predecessor != "" &&
-			betweenRightInclude(id, c.hashKey(predecessor), c.chordId)) {
+			betweenRightInclude(id, c.HashKey(predecessor), c.chordId)) {
 		return c.conf.Socket.GetAddress(), nil
 	}
 	// case 1: if successor = "". This case happens in the initialization of chord
@@ -136,7 +128,7 @@ func (c *Chord) findSuccessor(id uint) (string, error) {
 	}
 
 	// case 2: if id is in (chordId, successor], return the address of successor
-	if betweenRightInclude(id, c.chordId, c.hashKey(successor)) {
+	if betweenRightInclude(id, c.chordId, c.HashKey(successor)) {
 		return successor, nil
 	}
 
@@ -193,21 +185,21 @@ func (c *Chord) FindSuccessorRemote(dest string, id uint) (string, error) {
 		return "", err
 	}
 	log.Debug().Msgf("FindSuccessorRemote: %d waits successorReply, send to %d, id = %d\n",
-		c.chordId, c.hashKey(dest), id)
+		c.chordId, c.HashKey(dest), id)
 
 	// waiting for successor of id
 	timer := time.After(500 * time.Second)
 	select {
 	case findSuccMsg := <- findSuccCh:
 		log.Debug().Msgf("FindSuccessorRemote: %d receives successorReply from %d, id = %d\n",
-			c.chordId, c.hashKey(dest), id)
+			c.chordId, c.HashKey(dest), id)
 		return findSuccMsg.Dest, nil
 	case <-timer:
 		return "", fmt.Errorf("FindSuccessorRemote: waiting for successor time out. ")
 	}
 }
 
-func (c *Chord) join(member string) error {
+func (c *Chord) Join(member string) error {
 	if successor, err := c.FindSuccessorRemote(member, c.chordId); err == nil {
 		if successor != c.conf.Socket.GetAddress() {
 			c.successor.write(successor)
@@ -218,7 +210,7 @@ func (c *Chord) join(member string) error {
 	}
 }
 
-func (c *Chord) init(member string) {
+func (c *Chord) Init(member string) {
 	if c.successor.read() == "" && c.predecessor.read() == "" {
 		c.successor.write(member)
 		c.predecessor.write(member)
@@ -245,7 +237,7 @@ func (c *Chord) Stabilize() error {
 	select {
 	case ReplyPredecessorMsg := <- c.askPredecessorCh:
 		if ReplyPredecessorMsg.Predecessor != "" &&
-			between(c.hashKey(ReplyPredecessorMsg.Predecessor), c.chordId, c.hashKey(successor)) {
+			between(c.HashKey(ReplyPredecessorMsg.Predecessor), c.chordId, c.HashKey(successor)) {
 			c.successor.write(ReplyPredecessorMsg.Predecessor)
 			//log.Debug().Msgf("Stabilize: %d receives successor %d's predecessor %d as new successor\n",
 			//	c.chordId, c.hashKey(successor), c.hashKey(ReplyPredecessorMsg.Predecessor))
@@ -283,150 +275,136 @@ func (c *Chord) FixFinger() error {
 	return nil
 }
 
+func (c *Chord) Lookup(key uint) (string, error) {
+	destination, err := c.findSuccessor(key)
+	return destination, err
+}
 
-func (c *Chord) ChordFindSuccessorCallback(msg types.Message, pkt transport.Packet) error {
-	successor := c.successor.read()
-	predecessor := c.predecessor.read()
-	findSuccessorMsg := msg.(*types.ChordFindSuccessorMessage)
-	log.Debug().Msgf("ChordFindSuccessorCallback: %d receives findSuccessor of %d, id = %d\n",
-		c.chordId, c.hashKey(findSuccessorMsg.Source), findSuccessorMsg.ID)
-	if successor == c.conf.Socket.GetAddress() {
-		return fmt.Errorf("ChordFindSuccessorCallback: successor is equal to currnode! ")
-	}
-	// case 0: if id is in (predecessor, chordId], return current node
-	// refer to https://www.kth.se/social/upload/51647996f276545db53654c0/3-chord.pdf page 22
-	// FIXME: not sure about this. The paper doesn't mention it
-	if findSuccessorMsg.ID == c.chordId ||
-		(predecessor != "" &&
-			betweenRightInclude(findSuccessorMsg.ID, c.hashKey(predecessor), c.chordId)) {
-		msg, err := c.msgRegistry.MarshalMessage(
-			types.ChordFindSuccessorReplyMessage{Dest: c.conf.Socket.GetAddress(), ID: findSuccessorMsg.ID})
-		if err != nil {
-			return err
-		}
-		errUnicast := c.Messaging.Unicast(findSuccessorMsg.Source, msg)
-		if errUnicast != nil {
-			return errUnicast
-		}
-	}
 
-	// case 1: if successor = "". This case happens in the initialization of chord
-	if successor == "" {
-		msg, err := c.msgRegistry.MarshalMessage(
-			types.ChordFindSuccessorReplyMessage{Dest: c.conf.Socket.GetAddress(), ID: findSuccessorMsg.ID})
-		if err != nil {
-			return err
-		}
-		//log.Debug().Msgf("ChordFindSuccessorCallback: case 1 : Successor = nil. " +
-		//	"%d sends findSuccessorReply to %d, id = %d\n",
-		//	c.chordId, c.hashKey(findSuccessorMsg.Source), findSuccessorMsg.ID)
-		errUnicast := c.Messaging.Unicast(findSuccessorMsg.Source, msg)
-		if errUnicast != nil {
-			return errUnicast
-		}
-	// case 2: if id is in (chordId, successor], return the address of successor
-	} else if betweenRightInclude(findSuccessorMsg.ID, c.chordId, c.hashKey(successor)) {
-		msg, err := c.msgRegistry.MarshalMessage(
-			types.ChordFindSuccessorReplyMessage{Dest: successor, ID: findSuccessorMsg.ID})
-		if err != nil {
-			return err
-		}
-		log.Debug().Msgf("ChordFindSuccessorCallback: case 2 Successor = %d. " +
-			"%d sends findSuccessorReply to %d, id = %d\n",
-			c.hashKey(successor), c.chordId, findSuccessorMsg.Source, findSuccessorMsg.ID)
-		errUnicast := c.Messaging.Unicast(findSuccessorMsg.Source, msg)
-		if errUnicast != nil {
-			return errUnicast
-		}
+func (c *Chord) Get(key uint) (interface{}, bool, error) {
+	dest, err := c.findSuccessor(key)
+	if err != nil {
+		return nil, false, err
+	}
+	if c.chordId == c.HashKey(dest) {
+		value, ok := c.blockStore.get(key)
+		return value, ok, nil
 	} else {
-		nStar, err1 := c.closestPrecedingNode(findSuccessorMsg.ID)
-		if err1 != nil {
-			return err1
-		}
+		// create a channel
+		var kvCh chan types.ChordGiveKVMessage
 
-		if nStar == c.conf.Socket.GetAddress() {
-			msg, err := c.msgRegistry.MarshalMessage(
-				types.ChordFindSuccessorReplyMessage{Dest: successor, ID: findSuccessorMsg.ID})
-			if err != nil {
-				return err
-			}
-			log.Debug().Msgf("ChordFindSuccessorCallback: case 3.1 Successor = %d. " +
-				"%d sends findSuccessorReply to %d, id = %d\n",
-				c.hashKey(successor), c.chordId, findSuccessorMsg.Source, findSuccessorMsg.ID)
-			errUnicast := c.Messaging.Unicast(findSuccessorMsg.Source, msg)
-			if errUnicast != nil {
-				return errUnicast
-			}
+		c.chMutex.Lock()
+		if ch, ok := c.acquireKVCh[key]; ok {
+			kvCh = ch
 		} else {
-			log.Debug().Msgf("ChordFindSuccessorCallback: case 3.2 Source = %d. " +
-				"%d relay to %d, id = %d\n",
-				c.hashKey(findSuccessorMsg.Source), c.chordId, c.hashKey(nStar), findSuccessorMsg.ID)
-			if err := c.RequestSuccessorRemote(findSuccessorMsg.Source,
-				nStar, findSuccessorMsg.ID); err != nil {
-				return err
-			}
+			ch := make(chan types.ChordGiveKVMessage, 10)
+			kvCh = ch
+			c.acquireKVCh[key] = kvCh
 		}
+		c.chMutex.Unlock()
 
+
+		// send packet to the owner
+		kvMsg, err := c.msgRegistry.MarshalMessage(
+			types.ChordAskKVMessage{Key: key})
+		if err != nil {
+			return nil, false, err
+		}
+		err1 := c.Messaging.Unicast(dest, kvMsg)
+		if err1 != nil {
+			return nil, false, err1
+		}
+		// waiting for successor of id
+		timer := time.After(20 * time.Second)
+		select {
+		case kvReplyMsg := <- kvCh:
+			return kvReplyMsg.Value, kvReplyMsg.Exist, nil
+		case <-timer:
+			return nil, false, fmt.Errorf("FindSuccessorRemote: waiting for successor time out. ")
+		}
 	}
-	return nil
 }
 
-func (c *Chord) ChordFindSuccessorReplyCallback(msg types.Message, pkt transport.Packet) error {
-	findSuccessorReplyMsg := msg.(*types.ChordFindSuccessorReplyMessage)
-	c.chMutex.Lock()
-	if ch, ok := c.findSuccessorCh[findSuccessorReplyMsg.ID]; ok {
-		ch <- *findSuccessorReplyMsg
-	} else {
-		return fmt.Errorf("ChordFindSuccessorReplyCallback: the channel doesn't exist. ")
-	}
-	c.chMutex.Unlock()
-
-	return nil
-}
-
-func (c *Chord) ChordAskPredecessorCallback(msg types.Message, pkt transport.Packet) error {
-	replyMsg, err := c.msgRegistry.MarshalMessage(
-		types.ChordReplyPredecessorMessage{Predecessor: c.predecessor.read()})
+func (c *Chord) Put(key uint, data interface{}) error {
+	dest, err := c.findSuccessor(key)
 	if err != nil {
 		return err
 	}
-	if errUnicast := c.Messaging.Unicast(pkt.Header.Source, replyMsg); errUnicast != nil {
-		return errUnicast
+	if c.chordId == c.HashKey(dest) {
+		c.blockStore.put(key, data)
+	} else {
+		kvMsg, err := c.msgRegistry.MarshalMessage(
+			types.ChordInsertKVMessage{Key: key, Value: data})
+		if err != nil {
+			return err
+		}
+		err1 := c.Messaging.Unicast(dest, kvMsg)
+		if err1 != nil {
+			return err1
+		}
 	}
 	return nil
 }
 
-func (c *Chord) ChordReplyPredecessorCallback(msg types.Message, pkt transport.Packet) error {
-	replyMsg := msg.(*types.ChordReplyPredecessorMessage)
-	c.askPredecessorCh <- *replyMsg
-	return nil
+func (c *Chord) GetChordId() uint{
+	return c.chordId
 }
 
-func (c *Chord) ChordNotifyCallback(msg types.Message, pkt transport.Packet) error {
-	nStar := pkt.Header.Source
-	nStarId := c.hashKey(nStar)
-	predecessor := c.predecessor.read()
-	if predecessor == "" ||
-		between(nStarId, c.hashKey(predecessor), c.chordId) {
-		c.predecessor.write(nStar)
-		//log.Debug().Msgf("NotifyCallback: %d receives %d as predecessor\n", c.chordId, nStarId)
+func (c *Chord) GetPredecessor() string {
+	return c.predecessor.read()
+}
+
+func (c *Chord) GetSuccessor() string {
+	return c.successor.read()
+}
+
+// just for test
+func (c *Chord) GetFingerTableItem(i int) (string, error) {
+	return c.fingerTable.load(i)
+}
+
+func (c *Chord) GetFingerTable() []uint {
+	res := make([]uint, c.conf.ChordBits)
+	for i := 0; i < int(c.conf.ChordBits); i++ {
+		str, _ := c.GetFingerTableItem(i)
+		res[i] = c.HashKey(str)
 	}
+	return res
+}
+
+// just for test
+func (c *Chord) OutputStorage() map[uint]interface{} {
+	c.blockStore.Lock()
+	data :=  c.blockStore.data
+	c.blockStore.Unlock()
+	return data
+}
+
+func (c *Chord) transferKey(dest string, begin uint, end uint) error {
+	data := c.blockStore.findBetweenRightInclude(begin, end)
+	transferMsg,err := c.msgRegistry.MarshalMessage(
+		types.ChordTransferKeyMessage{Data: data})
+	if err != nil {
+		return err
+	}
+	err1 := c.Messaging.Unicast(dest, transferMsg)
+	if err1 != nil {
+		return err1
+	}
+	c.blockStore.deleteBetweenRightInclude(begin, end)
 	return nil
 }
 
-func (c *Chord) print() {
-	id := c.hashKey(c.conf.Socket.GetAddress())
-	fmt.Printf("caonima %d\n", id)
+func (c *Chord) isKilled() bool {
+	return atomic.LoadInt32(&c.stat) == KILL
 }
 
-func (c *Chord) insertTable() {
-	c.fingerTable.insert(0, c.conf.Socket.GetAddress())
+func (c *Chord) Stop() {
+	atomic.StoreInt32(&c.stat, KILL)
 }
 
-func (c *Chord) readTable() {
-	aaa,err:= c.fingerTable.load(4)
-	fmt.Println(len(aaa))
-	fmt.Println(err)
-	fmt.Println(aaa)
+func (c *Chord) Start() {
+	atomic.StoreInt32(&c.stat, ALIVE)
+	go c.stabilizeDaemon(c.conf.StabilizeInterval)
+	go c.fixFingerDaemon(c.conf.FixFingersInterval)
 }
-

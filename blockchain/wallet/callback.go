@@ -1,27 +1,24 @@
 package wallet
 
 import (
-	"fmt"
-
-	"github.com/ethereum/go-ethereum/crypto"
-	"go.dedis.ch/cs438/blockchain/account"
+	"github.com/rs/zerolog"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 )
 
-func (w *Wallet) WalletTxnMsgCallback(msg types.Message, pkt transport.Packet) error {
-	signedTxnMsg := msg.(*types.WalletTransactionMessage)
-	signedTxn := signedTxnMsg.Txn
-	fmt.Println(w.addr)
-	publicKey, err := crypto.Ecrecover(signedTxn.Digest, signedTxn.Signature)
-	if err != nil {
-		return err
-	}
-	okValidSignature := crypto.VerifySignature(publicKey, signedTxn.Digest,
-		signedTxn.Signature[:len(signedTxn.Signature)-1])
+func (w *Wallet) SyncAccountReplyMessageCallback(msg types.Message, pkt transport.Packet) error {
+	logger := w.logger.With().Str("callback", "SyncAccountReply").Logger().Level(zerolog.ErrorLevel)
+	syncMsg := msg.(*types.SyncAccountReplyMessage)
+	logger.Info().Msgf("receive sync account msg: %s", syncMsg.String())
 
-	okValidPublickey := signedTxn.Txn.From == *account.NewAddressFromPublicKey(publicKey)
-	fmt.Printf("I am %s, the validation of the transaction sent from %s is %t\n",
-		w.addr, pkt.Header.Source, okValidSignature && okValidPublickey)
+	future, ok := w.syncFutures[syncMsg.Timestamp]
+	if !ok {
+		logger.Warn().Msgf("msg has no future: %s", syncMsg.String())
+		return nil
+	}
+	select {
+	case future <- syncMsg:
+	default:
+	}
 	return nil
 }

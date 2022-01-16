@@ -44,7 +44,6 @@ func (m *Miner) doValueTransfer(txn *transaction.SignedTransaction, worldState s
 	}
 	fromState.Balance -= uint(txn.Txn.Value)
 	fromState.Nonce += 1
-	// TODO: how do we rollback the impact on the kv?
 	if err = worldState.Put(txn.Txn.From.String(), fromState); err != nil {
 		return fmt.Errorf("cannot put from addr and state to KV: %w", err)
 	}

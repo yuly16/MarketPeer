@@ -22,6 +22,7 @@ type Messager interface {
 	AddPeer(addr ...string)
 	GetRoutingTable() peer.RoutingTable
 	SetRoutingEntry(origin, relayAddr string)
+	GetNeighbors() []string
 }
 
 // RegistryMessager implements Messager
@@ -38,6 +39,10 @@ func NewRegistryMessager(addr string, messaging peer.Messager, registry registry
 	m.messager = messaging
 	m.msgRegistry = registry
 	return m
+}
+
+func (m *RegistryMessager) GetNeighbors() []string {
+	return m.messager.GetNeighbors()
 }
 
 func (m *RegistryMessager) Start() error {

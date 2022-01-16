@@ -43,9 +43,11 @@ func buildFullNodeConf(temp *configTemplate) *blockchain.FullNodeConf {
 	conf.PublicKey = temp.publicKey
 	conf.Account = temp.acc
 	peerMessagerConf := buildPeerNodeConf(temp)
-	conf.Messaging = messaging.NewRegistryMessager(conf.Addr, impl.NewMessager(*peerMessagerConf), temp.registry)
+	conf.PeerMessager = impl.NewMessager(*peerMessagerConf)
+	conf.Messaging = messaging.NewRegistryMessager(conf.Addr, conf.PeerMessager, temp.registry)
 	conf.Bootstrap = temp.blockchain
 	conf.BlockTransactions = temp.blocktxns
+	conf.KVFactory = temp.kvFactory
 	return conf
 }
 
@@ -66,6 +68,9 @@ func buildPeerNodeConf(template *configTemplate) *peer.Configuration {
 	config.PaxosThreshold = template.paxosThreshold
 	config.PaxosID = template.paxosID
 	config.PaxosProposerRetry = template.paxosProposerRetry
+	config.ChordBits = template.chordBits
+	config.StabilizeInterval = template.StabilizeInterval
+	config.FixFingersInterval = template.FixFingersInterval
 	return config
 }
 
@@ -99,11 +104,11 @@ func WithKVFactory(factory storage.KVFactory) Option {
 }
 
 // construct a fullnode for testing purpose
-func NewTestFullNode(t *testing.T, opts ...Option) (*blockchain.FullNode, messaging.Messager) {
+func NewTestFullNode(t *testing.T, opts ...Option) (*blockchain.FullNode, peer.Messager) {
 	template := newConfigTemplate()
 	for _, opt := range opts {
 		opt(&template)
 	}
 	fullNodeConf := buildFullNodeConf(&template)
-	return blockchain.NewFullNode(fullNodeConf), fullNodeConf.Messaging
+	return blockchain.NewFullNode(fullNodeConf), fullNodeConf.PeerMessager
 }

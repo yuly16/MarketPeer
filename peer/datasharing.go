@@ -88,16 +88,19 @@ type DataSharing interface {
 	LookupHashId(key uint) (uint, error)
 
 	// GetId acquire the value of key
-	GetId(key uint) (uint, bool)
+	GetId(key uint) (interface{}, bool)
 
 	// PutId puts key into current node
-	PutId(key uint, data uint)
+	PutId(key uint, data interface{})
 
 	// Get acquire the value of key
-	Get(key string) (string, bool)
+	Get(key string) (interface{}, bool)
 
 	// Put puts key into current node
-	Put(key string, data uint)
+	Put(key string, data interface{})
+
+	// GetChordStorage outputs chordStorage
+	GetChordStorage() map[uint]interface{}
 
 	GetFingerTable() []uint
 

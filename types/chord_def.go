@@ -32,3 +32,30 @@ type ChordReplyPredecessorMessage struct {
 type ChordNotifyMessage struct {
 }
 
+
+// ChordTransferKeyMessage n sends this message to n',
+// and n' should transfer the key belonging to [n, n')
+type ChordTransferKeyMessage struct {
+	Data map[uint]interface{}
+}
+
+// ChordInsertKVMessage n sends this message to n',
+// n' should save this kv pair into its own storage.
+type ChordInsertKVMessage struct {
+	Key uint
+	Value interface{}
+}
+
+// ChordAskKVMessage n sends this message to n',
+// n' should give this kv pair into n.
+type ChordAskKVMessage struct {
+	Key uint
+}
+
+// ChordGiveKVMessage n sends this message to n',
+// to give a pair to kv
+type ChordGiveKVMessage struct {
+	Key uint
+	Value interface{}
+	Exist bool
+}
