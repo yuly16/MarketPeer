@@ -326,20 +326,9 @@ func Test_Client_transferAccount(t *testing.T) {
 
 	time.Sleep(time.Second * 5)
 
-	txn1 := transaction.NewTransaction(0, 5,
-		*node1.BlockChainFullNode.GetAccountAddr(),
-		*node2.BlockChainFullNode.GetAccountAddr())
-	txn2 := transaction.NewTransaction(0, 5,
-		*node2.BlockChainFullNode.GetAccountAddr(),
-		*node3.BlockChainFullNode.GetAccountAddr())
-	txn3 := transaction.NewTransaction(0, 5,
-		*node3.BlockChainFullNode.GetAccountAddr(),
-		*node1.BlockChainFullNode.GetAccountAddr())
 
-	node1.BlockChainFullNode.TransferEpfer(*acc2, 1)
-	node1.BlockChainFullNode.SubmitTxn(txn1)
-	node2.BlockChainFullNode.SubmitTxn(txn2)
-	node3.BlockChainFullNode.SubmitTxn(txn3)
+	err := node1.BlockChainFullNode.TransferEpfer(*acc2.GetAddr(), 1)
+	require.NoError(t, err)
 
 	time.Sleep(3 * time.Second)
 	fmt.Printf("node1 chain: \n%s", node1.BlockChainFullNode.GetChain())

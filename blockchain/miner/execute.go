@@ -2,13 +2,13 @@ package miner
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
-    "encoding/json"
 
-	"go.dedis.ch/cs438/contract/impl"
 	"go.dedis.ch/cs438/blockchain/account"
 	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/blockchain/transaction"
+	"go.dedis.ch/cs438/contract/impl"
 )
 
 func (m *Miner) executeTxn(txn *transaction.SignedTransaction, worldState storage.KV) error {
@@ -88,7 +88,6 @@ func RetrieveState(address string, worldState storage.KV) (*account.State, error
 // Contract execution logistics
 // Type casting problem: need send(string, int)
 func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storage.KV) error {
-	
 	// 1. reconstruct the contract code in account state
 	var contract_inst impl.Contract
 	contract_address := txn.Txn.To.String()
