@@ -34,6 +34,6 @@ jobs:
       - name: Run chord test
         run: go test -v -race -run Test_Chord ./peer/tests/unit
       - name: Run blockchain test
-        run: go test -v -race -run Test_Network ./blockchain/tests/
+        run: go test -v -run Test_Network ./blockchain/tests/
 
 

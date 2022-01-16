@@ -458,9 +458,9 @@ func Test_Network_Transfer_Epfer(t *testing.T) {
 	node2.Start()
 	node3.Start()
 	time.Sleep(200 * time.Millisecond)
-	err := node1.TransferEpfer(*node2.GetAccount(), 50)
+	err := node1.TransferEpfer(*node2.GetAccount().GetAddr(), 50)
 	require.NoError(t, err)
-	err = node1.TransferEpfer(*node2.GetAccount(), 50)
+	err = node1.TransferEpfer(*node2.GetAccount().GetAddr(), 50)
 	require.NoError(t, err)
 
 	time.Sleep(3 * time.Second)
@@ -517,23 +517,23 @@ func Test_Network_Transfer_Epfer_complex(t *testing.T) {
 	node3.Start()
 	time.Sleep(200 * time.Millisecond)
 	go func() {
-		err := node1.TransferEpfer(*node2.GetAccount(), 50)
+		err := node1.TransferEpfer(*node2.GetAccount().GetAddr(), 50)
 		require.NoError(t, err)
-		err = node1.TransferEpfer(*node2.GetAccount(), 50)
-		require.NoError(t, err)
-	}()
-
-	go func() {
-		err := node2.TransferEpfer(*node3.GetAccount(), 50)
-		require.NoError(t, err)
-		err = node2.TransferEpfer(*node3.GetAccount(), 50)
+		err = node1.TransferEpfer(*node2.GetAccount().GetAddr(), 50)
 		require.NoError(t, err)
 	}()
 
 	go func() {
-		err := node3.TransferEpfer(*node1.GetAccount(), 50)
+		err := node2.TransferEpfer(*node3.GetAccount().GetAddr(), 50)
 		require.NoError(t, err)
-		err = node3.TransferEpfer(*node1.GetAccount(), 50)
+		err = node2.TransferEpfer(*node3.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+	}()
+
+	go func() {
+		err := node3.TransferEpfer(*node1.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+		err = node3.TransferEpfer(*node1.GetAccount().GetAddr(), 50)
 		require.NoError(t, err)
 	}()
 
@@ -606,23 +606,23 @@ func Test_Network_Transfer_Epfer_complex_fivenodes(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	go func() {
-		err := node1.TransferEpfer(*node2.GetAccount(), 50)
+		err := node1.TransferEpfer(*node2.GetAccount().GetAddr(), 50)
 		require.NoError(t, err)
-		err = node1.TransferEpfer(*node2.GetAccount(), 50)
-		require.NoError(t, err)
-	}()
-
-	go func() {
-		err := node2.TransferEpfer(*node3.GetAccount(), 50)
-		require.NoError(t, err)
-		err = node2.TransferEpfer(*node3.GetAccount(), 50)
+		err = node1.TransferEpfer(*node2.GetAccount().GetAddr(), 50)
 		require.NoError(t, err)
 	}()
 
 	go func() {
-		err := node3.TransferEpfer(*node1.GetAccount(), 50)
+		err := node2.TransferEpfer(*node3.GetAccount().GetAddr(), 50)
 		require.NoError(t, err)
-		err = node3.TransferEpfer(*node1.GetAccount(), 50)
+		err = node2.TransferEpfer(*node3.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+	}()
+
+	go func() {
+		err := node3.TransferEpfer(*node1.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+		err = node3.TransferEpfer(*node1.GetAccount().GetAddr(), 50)
 		require.NoError(t, err)
 	}()
 

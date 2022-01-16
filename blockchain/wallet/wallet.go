@@ -6,6 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
+	"time"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/rs/zerolog"
 	"go.dedis.ch/cs438/blockchain/account"
@@ -14,8 +17,6 @@ import (
 	"go.dedis.ch/cs438/blockchain/transaction"
 	"go.dedis.ch/cs438/logging"
 	"go.dedis.ch/cs438/types"
-	"math"
-	"time"
 )
 
 type WalletConf struct {
@@ -143,7 +144,7 @@ func (w *Wallet) SyncAccount() error {
 }
 
 // TransferEpfer to dest
-func (w *Wallet) TransferEpfer(dest account.Account, epfer int) error {
+func (w *Wallet) TransferEpfer(dest account.Address, epfer int) error {
 	// create a transaction and send
 	// first do a SyncAccount?
 	err := w.SyncAccount()
@@ -153,10 +154,10 @@ func (w *Wallet) TransferEpfer(dest account.Account, epfer int) error {
 	}
 	// first do a local balance check
 	if w.account.GetBalance() < epfer {
-		return fmt.Errorf("not enough balance, actual=%d, transfer=%d", w.account.GetBalance())
+		return fmt.Errorf("not enough balance, actual=%d, transfer=%d", w.account.GetBalance(), epfer)
 	}
 	// create the transaction
-	txn := transaction.NewTransaction(w.account.GetNonce(), epfer, *w.GetAccount().GetAddr(), *dest.GetAddr())
+	txn := transaction.NewTransaction(w.account.GetNonce(), epfer, *w.GetAccount().GetAddr(), dest)
 	// submit
 	handle := w.SubmitTxn(txn)
 	time.Sleep(1 * time.Second)
