@@ -77,8 +77,8 @@ func (w *Wallet) Start() {}
 
 func (w *Wallet) Stop() {}
 
-// transferEpfer to dest
-func (w *Wallet) transferEpfer(dest account.Account, epfer int) {
+// TransferEpfer to dest
+func (w *Wallet) TransferEpfer(dest account.Account, epfer int) {
 
 }
 
