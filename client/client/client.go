@@ -53,6 +53,8 @@ func (c *Client) ReadProduct(key uint) (Product, bool) {
 	value, ok, _ := c.ChordNode.Get(key)
 	valueBytes, _ := json.Marshal(value)
 	product := Product{}
-	json.Unmarshal(valueBytes, &product)
+	if ok {
+		_ = json.Unmarshal(valueBytes, &product)
+	}
 	return product, ok
 }

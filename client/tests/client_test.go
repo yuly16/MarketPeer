@@ -38,6 +38,7 @@ func Test_Client_SimpleScenario(t *testing.T) {
 			z.WithStabilizeInterval(time.Millisecond*500),
 			z.WithFixFingersInterval(time.Millisecond*250))
 		nodes[i].Start()
+		defer nodes[i].Stop()
 	}
 
 	for i := 1; i < nodeNum; i++ {
@@ -90,9 +91,6 @@ func Test_Client_SimpleScenario(t *testing.T) {
 			require.Equal(t, expect, fingerTable[j])
 		}
 	}
-	for i := 0; i < nodeNum; i++ {
-		nodes[i].Stop()
-	}
 }
 
 func Test_Client_ProductStorage(t *testing.T) {
@@ -115,6 +113,7 @@ func Test_Client_ProductStorage(t *testing.T) {
 			z.WithStabilizeInterval(time.Millisecond*500),
 			z.WithFixFingersInterval(time.Millisecond*250))
 		nodes[i].Start()
+		defer nodes[i].Stop()
 	}
 
 	for i := 1; i < nodeNum; i++ {
@@ -177,9 +176,6 @@ func Test_Client_ProductStorage(t *testing.T) {
 	actualBanana, ok := clientNode.ReadProduct(banana_key)
 	require.Equal(t, true, ok)
 	require.Equal(t, banana, actualBanana)
-	for i := 0; i < nodeNum; i++ {
-		nodes[i].Stop()
-	}
 }
 
 

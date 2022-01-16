@@ -404,7 +404,7 @@ func (c *Chord) Stop() {
 }
 
 func (c *Chord) Start() {
+	atomic.StoreInt32(&c.stat, ALIVE)
 	go c.stabilizeDaemon(c.conf.StabilizeInterval)
 	go c.fixFingerDaemon(c.conf.FixFingersInterval)
-	atomic.StoreInt32(&c.stat, ALIVE)
 }
