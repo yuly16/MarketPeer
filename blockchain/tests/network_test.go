@@ -23,7 +23,7 @@ import (
 // 0: 100, apple->10
 // 1: 200, orange->20
 // 2: 300, cola->100
-func Test_Network_SubmitTxn(t *testing.T) {
+func Test_Network_SubmitTxn1(t *testing.T) {
 	transp := channel.NewTransport()
 
 	accountFactory := func(balance uint, key string, value interface{}) (*account.Account, *ecdsa.PrivateKey) {
@@ -275,6 +275,7 @@ func Test_Network_SubmitTxn3(t *testing.T) {
 	node5.Stop()
 }
 
+// TODO: a node send several txns
 // TODO: test txn verification. the invalid cases!
 // TODO: other chain might need to overwrite this chain
 // TODO: 现在可能造成一种结果，第一个 miner 会一直占优势. 因为其他 miner 只有在他们的 PoW 结束之后才能知道自己白做的, 导致每次都慢一些

@@ -33,7 +33,7 @@ func NewBlockChainWithGenesis(genesis *Block) *BlockChain {
 // TODO: do we need a lock?
 func (bc *BlockChain) LatestWorldState() (storage.KV, *Block, error) {
 	bc.mu.Lock()
-	bc.mu.Unlock()
+	defer bc.mu.Unlock()
 	if len(bc.ends) == 1 {
 		return bc.ends[0].State.Copy(), bc.ends[0], nil
 	} else {
@@ -144,6 +144,8 @@ func (bc *BlockChain) Append(block *Block) error {
 }
 
 func (bc *BlockChain) HashBytes() []byte {
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
 	h := sha256.New()
 	canicalEnd := bc.ends[0]
 	for _, end := range bc.ends {
