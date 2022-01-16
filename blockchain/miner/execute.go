@@ -1,6 +1,7 @@
 package miner
 
 import (
+	"crypto/rand"
 	"fmt"
     "encoding/json"
 
@@ -22,14 +23,22 @@ func (m *Miner) doExecuteTxn(txn *transaction.SignedTransaction, worldState stor
 	// TODO: contract case
 	if txn.Txn.To.IsContract() {
 		return m.doContract(txn, worldState)
+	} else if txn.Txn.Type == transaction.CREATE_CONTRACT {
+		// create a transaction
+		err := m.createContract(txn, worldState)
+		if err != nil {
+			return fmt.Errorf("create contract error: %w", err)
+		}
+		return nil
+	} else {
+		// value transfer
+		err := m.doValueTransfer(txn, worldState)
+		if err != nil {
+			return fmt.Errorf("execute value transfer error: %w", err)
+		}
+		return nil
 	}
 
-	// value transfer
-	err := m.doValueTransfer(txn, worldState)
-	if err != nil {
-		return fmt.Errorf("execute value transfer error: %w", err)
-	}
-	return nil
 }
 
 func (m *Miner) doValueTransfer(txn *transaction.SignedTransaction, worldState storage.KV) error {
@@ -203,5 +212,26 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 	proposer_state.Nonce += 1
 	fmt.Println("Completed")
 
+	return nil
+}
+
+func (m *Miner) createContract(txn *transaction.SignedTransaction, worldState storage.KV) error {
+	bytesBegin := []byte{0,0,0,0}
+	bytesEnd := make([]byte, 4)
+	_, err := rand.Read(bytesEnd)
+	if err != nil {
+		return err
+	}
+	address := append(bytesBegin, bytesEnd...)
+	state := account.State{
+		Nonce: 0,
+		Balance: 0,
+		StorageRoot: nil,
+		Code: txn.Txn.Code,
+	}
+	err = worldState.Put(string(address), &state)
+	if err != nil {
+		return fmt.Errorf("put contract error: %w", err)
+	}
 	return nil
 }

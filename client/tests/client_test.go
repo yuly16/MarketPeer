@@ -1,10 +1,15 @@
 package tests
 
 import (
+	"crypto/ecdsa"
 	"crypto/sha1"
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
+	"go.dedis.ch/cs438/blockchain/account"
+	"go.dedis.ch/cs438/blockchain/block"
+	"go.dedis.ch/cs438/blockchain/storage"
+	"go.dedis.ch/cs438/blockchain/transaction"
 	"go.dedis.ch/cs438/client/client"
 	z "go.dedis.ch/cs438/internal/testing"
 	"go.dedis.ch/cs438/registry/standard"
@@ -15,7 +20,20 @@ import (
 	"time"
 )
 
-
+// based on init accounts info, generate the genesis block
+func generateGenesisBlock(kvFactory storage.KVFactory, accounts ...*account.Account) *block.Block {
+	bb := block.NewBlockBuilder(kvFactory).
+		SetParentHash(block.DUMMY_PARENT_HASH).
+		SetNonce(0).
+		SetNumber(0).
+		SetDifficulty(2).
+		SetBeneficiary(*account.NewAddress([8]byte{}))
+	for _, acc := range accounts {
+		bb.SetAddrState(acc.GetAddr(), acc.GetState())
+	}
+	b := bb.Build()
+	return b
+}
 
 
 func Test_Client_SimpleScenario(t *testing.T) {
@@ -85,9 +103,6 @@ func Test_Client_SimpleScenario(t *testing.T) {
 					break
 				}
 			}
-			fmt.Println("________________________")
-			fmt.Println(expect)
-			fmt.Println(fingerTable[j])
 			require.Equal(t, expect, fingerTable[j])
 		}
 	}
@@ -176,6 +191,177 @@ func Test_Client_ProductStorage(t *testing.T) {
 	actualBanana, ok := clientNode.ReadProduct(banana_key)
 	require.Equal(t, true, ok)
 	require.Equal(t, banana, actualBanana)
+}
+
+func Test_Client_SubmitTransaction(t *testing.T) {
+	transp := channel.NewTransport()
+	bitNum := 12
+	// create account
+	accountFactory := func(balance uint, key string, value interface{}) (*account.Account, *ecdsa.PrivateKey) {
+		privateKey1, err := crypto.GenerateKey()
+		require.NoError(t, err)
+		publicKey1 := &privateKey1.PublicKey
+		ac1 := account.NewAccountBuilder(crypto.FromECDSAPub(publicKey1), storage.CreateSimpleKV).
+			WithBalance(balance).WithKV(key, value).Build()
+		return ac1, privateKey1
+	}
+
+	acc1, pri1 := accountFactory(100, "apple", 10)
+	acc2, pri2 := accountFactory(200, "orange", 20)
+	acc3, pri3 := accountFactory(300, "cola", 100)
+
+	genesisFactory := func() *block.Block {
+		return generateGenesisBlock(storage.CreateSimpleKV, acc1, acc2, acc3)
+	}
+
+	nodeFactory := func(acc *account.Account, pri *ecdsa.PrivateKey) *client.Client {
+		sock, err := transp.CreateSocket("127.0.0.1:0")
+		require.NoError(t, err)
+		//crypto.
+		node := *z.NewClient(t,
+			z.WithSocket(sock),
+			z.WithMessageRegistry(standard.NewRegistry()),
+			z.WithPrivateKey(pri),
+			z.WithAccount(acc),
+			z.WithGenesisBlock(genesisFactory()),
+			z.WithHeartbeat(time.Millisecond*500),
+			z.WithChordBits(uint(bitNum)),
+			z.WithStabilizeInterval(time.Millisecond*500),
+			z.WithFixFingersInterval(time.Millisecond*250))
+		node.Start()
+		return &node
+	}
+
+	node1 := nodeFactory(acc1, pri1)
+	node2 := nodeFactory(acc2, pri2)
+	node3 := nodeFactory(acc3, pri3)
+
+	node1.AddPeers(node2.Address)
+	node1.AddPeers(node3.Address)
+
+	time.Sleep(time.Second * 5)
+
+	txn1 := transaction.NewTransaction(0, 5,
+		*node1.BlockChainFullNode.GetAccountAddr(),
+		*node2.BlockChainFullNode.GetAccountAddr())
+	txn2 := transaction.NewTransaction(0, 5,
+		*node2.BlockChainFullNode.GetAccountAddr(),
+		*node3.BlockChainFullNode.GetAccountAddr())
+	txn3 := transaction.NewTransaction(0, 5,
+		*node3.BlockChainFullNode.GetAccountAddr(),
+		*node1.BlockChainFullNode.GetAccountAddr())
+
+	node1.BlockChainFullNode.SubmitTxn(txn1)
+	node2.BlockChainFullNode.SubmitTxn(txn2)
+	node3.BlockChainFullNode.SubmitTxn(txn3)
+
+	time.Sleep(3 * time.Second)
+	fmt.Printf("node1 chain: \n%s", node1.BlockChainFullNode.GetChain())
+	fmt.Printf("node2 chain: \n%s", node2.BlockChainFullNode.GetChain())
+	fmt.Printf("node3 chain: \n%s", node3.BlockChainFullNode.GetChain())
+
+	require.Equal(t, node1.BlockChainFullNode.GetChain().Hash(),
+		node2.BlockChainFullNode.GetChain().Hash())
+	require.Equal(t, node2.BlockChainFullNode.GetChain().Hash(),
+		node3.BlockChainFullNode.GetChain().Hash())
+	go func() {
+		node1.BlockChainFullNode.SyncAccount()
+	}()
+	go func() { node2.BlockChainFullNode.SyncAccount() }()
+	go func() { node3.BlockChainFullNode.SyncAccount() }()
+	time.Sleep(3 * time.Second)
+	require.Equal(t, acc1.String(), node1.BlockChainFullNode.GetAccount().String())
+	require.Equal(t, acc2.String(), node2.BlockChainFullNode.GetAccount().String())
+	require.Equal(t, acc3.String(), node3.BlockChainFullNode.GetAccount().String())
+	node1.Stop()
+	node2.Stop()
+	node3.Stop()
+}
+
+func Test_Client_transferAccount(t *testing.T) {
+	transp := channel.NewTransport()
+	bitNum := 12
+	// create account
+	accountFactory := func(balance uint, key string, value interface{}) (*account.Account, *ecdsa.PrivateKey) {
+		privateKey1, err := crypto.GenerateKey()
+		require.NoError(t, err)
+		publicKey1 := &privateKey1.PublicKey
+		ac1 := account.NewAccountBuilder(crypto.FromECDSAPub(publicKey1), storage.CreateSimpleKV).
+			WithBalance(balance).WithKV(key, value).Build()
+		return ac1, privateKey1
+	}
+
+	acc1, pri1 := accountFactory(100, "apple", 10)
+	acc2, pri2 := accountFactory(200, "orange", 20)
+	acc3, pri3 := accountFactory(300, "cola", 100)
+
+	genesisFactory := func() *block.Block {
+		return generateGenesisBlock(storage.CreateSimpleKV, acc1, acc2, acc3)
+	}
+
+	nodeFactory := func(acc *account.Account, pri *ecdsa.PrivateKey) *client.Client {
+		sock, err := transp.CreateSocket("127.0.0.1:0")
+		require.NoError(t, err)
+		//crypto.
+		node := *z.NewClient(t,
+			z.WithSocket(sock),
+			z.WithMessageRegistry(standard.NewRegistry()),
+			z.WithPrivateKey(pri),
+			z.WithAccount(acc),
+			z.WithGenesisBlock(genesisFactory()),
+			z.WithHeartbeat(time.Millisecond*500),
+			z.WithChordBits(uint(bitNum)),
+			z.WithStabilizeInterval(time.Millisecond*500),
+			z.WithFixFingersInterval(time.Millisecond*250))
+		node.Start()
+		return &node
+	}
+
+	node1 := nodeFactory(acc1, pri1)
+	node2 := nodeFactory(acc2, pri2)
+	node3 := nodeFactory(acc3, pri3)
+
+	node1.AddPeers(node2.Address)
+	node1.AddPeers(node3.Address)
+
+	time.Sleep(time.Second * 5)
+
+	txn1 := transaction.NewTransaction(0, 5,
+		*node1.BlockChainFullNode.GetAccountAddr(),
+		*node2.BlockChainFullNode.GetAccountAddr())
+	txn2 := transaction.NewTransaction(0, 5,
+		*node2.BlockChainFullNode.GetAccountAddr(),
+		*node3.BlockChainFullNode.GetAccountAddr())
+	txn3 := transaction.NewTransaction(0, 5,
+		*node3.BlockChainFullNode.GetAccountAddr(),
+		*node1.BlockChainFullNode.GetAccountAddr())
+
+	node1.BlockChainFullNode.TransferEpfer(*acc2, 1)
+	node1.BlockChainFullNode.SubmitTxn(txn1)
+	node2.BlockChainFullNode.SubmitTxn(txn2)
+	node3.BlockChainFullNode.SubmitTxn(txn3)
+
+	time.Sleep(3 * time.Second)
+	fmt.Printf("node1 chain: \n%s", node1.BlockChainFullNode.GetChain())
+	fmt.Printf("node2 chain: \n%s", node2.BlockChainFullNode.GetChain())
+	fmt.Printf("node3 chain: \n%s", node3.BlockChainFullNode.GetChain())
+
+	require.Equal(t, node1.BlockChainFullNode.GetChain().Hash(),
+		node2.BlockChainFullNode.GetChain().Hash())
+	require.Equal(t, node2.BlockChainFullNode.GetChain().Hash(),
+		node3.BlockChainFullNode.GetChain().Hash())
+	go func() {
+		node1.BlockChainFullNode.SyncAccount()
+	}()
+	go func() { node2.BlockChainFullNode.SyncAccount() }()
+	go func() { node3.BlockChainFullNode.SyncAccount() }()
+	time.Sleep(3 * time.Second)
+	require.Equal(t, acc1.String(), node1.BlockChainFullNode.GetAccount().String())
+	require.Equal(t, acc2.String(), node2.BlockChainFullNode.GetAccount().String())
+	require.Equal(t, acc3.String(), node3.BlockChainFullNode.GetAccount().String())
+	node1.Stop()
+	node2.Stop()
+	node3.Stop()
 }
 
 

@@ -11,6 +11,12 @@ import (
 	"go.dedis.ch/cs438/blockchain/account"
 )
 
+const (
+	CREATE_CONTRACT = iota
+	EXEC_CONTRACT
+	EXEC_TXN
+)
+
 func NewTransaction(nonce int, value int, from account.Address, to account.Address) Transaction {
 	txn := Transaction{}
 	txn.Nonce = nonce
@@ -53,6 +59,8 @@ type Transaction struct {
 	Nonce int
 	From  account.Address
 	To    account.Address
+	Type  int
+	Code  string
 	Value int
 	V     string
 	R     string
