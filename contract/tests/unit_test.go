@@ -2,16 +2,21 @@ package tests
 
 import (
 	"fmt"
+	"time"
 	"crypto/ecdsa"
+	"testing"
 
 	"go.dedis.ch/cs438/transport/channel"
+	"go.dedis.ch/cs438/registry/standard"
 	"github.com/alecthomas/participle/v2"
-	"testing"
 	"github.com/stretchr/testify/require"
-	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/contract/parser"
 	"go.dedis.ch/cs438/contract/impl"
+	"go.dedis.ch/cs438/blockchain"
+	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/blockchain/block"
+	"go.dedis.ch/cs438/blockchain/account"
+	"go.dedis.ch/cs438/blockchain/transaction"
 	z "go.dedis.ch/cs438/internal/testing"
 )
 
@@ -651,11 +656,11 @@ func Test_Contract_Execution_Network(t *testing.T) {
 	transp := channel.NewTransport()
 	
 	acc_buyer, pri_buyer := accountFactory(105, "apple", 5)
-	acc_seller, pri_seller := accountFactory(5, "apple", 10)
+	acc_seller, pri_seller := accountFactory(95, "apple", 10)
 
 	// simulate the process to create contract account (from buyer's side)
 	contract_code := `
-		ASSUME seller.balance > 100
+		ASSUME seller.balance > 50
 		IF buyer.balance > 10 THEN
 		 	buyer.transfer(5)
 			seller.send("apple", 5)
@@ -671,7 +676,7 @@ func Test_Contract_Execution_Network(t *testing.T) {
 	)
 	contract_bytecode, err := contract_inst.Marshal()
 	require.NoError(t, err)
-	acc_contract, pri_contract := contractFactory(0, contract_bytecode)
+	acc_contract, _ := contractFactory(0, contract_bytecode)
 
 	genesisFactory := func() *block.Block {
 		return generateGenesisBlock(storage.CreateSimpleKV, acc_buyer, acc_seller, acc_contract)
@@ -700,7 +705,7 @@ func Test_Contract_Execution_Network(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// trigger the contract from the seller side to contract account
-	txn := transaction.NewTransaction(0, 0, *node2.GetAccountAddr(), contract_account.GetAccountAddr())
+	txn := transaction.NewTransaction(0, 0, *node2.GetAccountAddr(), *acc_contract.GetAddr())
 	node2.SubmitTxn(txn)
 
 	time.Sleep(10 * time.Second)

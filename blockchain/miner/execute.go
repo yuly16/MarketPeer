@@ -78,7 +78,9 @@ func RetrieveState(address string, worldState storage.KV) (*account.State, error
 }
 
 // Contract execution logistics
+// Type casting problem: need send(string, int)
 func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storage.KV) error {
+	
 	// 1. reconstruct the contract code in account state
 	var contract_inst impl.Contract
 	contract_address := txn.Txn.To.String()
@@ -87,7 +89,7 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 		return contract_state_err
 	}
 
-	contract_bytecode := contract_acc_state.CodeHash
+	contract_bytecode := contract_acc_state.Code
 	unmarshal_err := json.Unmarshal(contract_bytecode, &contract_inst)
 	if unmarshal_err != nil {
 		return fmt.Errorf("unmarshal contract byte code error: %w", unmarshal_err)
@@ -101,6 +103,7 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 	if !valid {
 		return nil
 	}
+
 	actions, clause_err := contract_inst.CollectActions(worldState)
 	if clause_err != nil {
 		return fmt.Errorf("contract if clauses fail to evaluate: %w", clause_err)
@@ -111,7 +114,13 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 	proposer_account := contract_inst.GetProposerAccount()
 	acceptor_account := contract_inst.GetAcceptorAccount()
 	proposer_state, proposer_state_err := RetrieveState(proposer_account, worldState)
+	if proposer_state_err != nil {
+		return fmt.Errorf("fail to retrieve proposer state: %w", proposer_state_err)
+	}
 	acceptor_state, acceptor_state_err := RetrieveState(acceptor_account, worldState)
+	if acceptor_state_err != nil {
+		return fmt.Errorf("fail to retrieve acceptor state: %w", acceptor_state_err)
+	}
 
 	for _, action := range actions {
 		if action.Action == "transfer" { // manipulate balance
@@ -126,12 +135,14 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 		} else if action.Action == "send" { // manipulate storage
 			send_product := *action.Params[0].String
 			send_amount := *action.Params[1].Number
+
 			if action.Role == "buyer" {
 				amount_hold, err := proposer_state.StorageRoot.Get(send_product)
 				if err != nil {
 					return err
 				}
-				amount_hold_float, ok := amount_hold.(float64)
+				amount_hold_int, ok := amount_hold.(int)
+				amount_hold_float := float64(amount_hold_int)
 				if !ok {
 					return fmt.Errorf("cannot cast to float: %v", amount_hold)
 				}
@@ -145,7 +156,8 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 				if err != nil {
 					acceptor_state.StorageRoot.Put(send_product, send_amount)
 				} else {
-					amount_acceptor_float, ok := amount_acceptor.(float64)
+					amount_acceptor_int, ok := amount_acceptor.(int)
+					amount_acceptor_float := float64(amount_acceptor_int)
 					if !ok {
 						return fmt.Errorf("cannot cast to float: %v", amount_acceptor)
 					}
@@ -156,7 +168,8 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 				if err != nil {
 					return err
 				}
-				amount_hold_float, ok := amount_hold.(float64)
+				amount_hold_int, ok := amount_hold.(int)
+				amount_hold_float := float64(amount_hold_int)
 				if !ok {
 					return fmt.Errorf("cannot cast to float: %v", amount_hold)
 				}
@@ -170,7 +183,8 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 				if err != nil {
 					proposer_state.StorageRoot.Put(send_product, send_amount)
 				} else {
-					amount_acceptor_float, ok := amount_acceptor.(float64)
+					amount_acceptor_int, ok := amount_acceptor.(int)
+					amount_acceptor_float := float64(amount_acceptor_int)
 					if !ok {
 						return fmt.Errorf("cannot cast to float: %v", amount_acceptor)
 					}
@@ -179,6 +193,7 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 			}
 		}
 	}
+
 	if err_put_proposer := worldState.Put(proposer_account, proposer_state); err_put_proposer != nil {
 		return fmt.Errorf("cannot put proposer addr and state to KV: %w", err_put_proposer)
 	}
@@ -186,6 +201,7 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 		return fmt.Errorf("cannot put acceptor addr and state to KV: %w", err_put_acceptor)
 	}
 	proposer_state.Nonce += 1
+	fmt.Println("Completed")
 
 	return nil
 }

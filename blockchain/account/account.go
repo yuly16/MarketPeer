@@ -48,6 +48,11 @@ func NewAccountBuilder(pub []byte, kvFactory storage.KVFactory) *AccountBuilder 
 	return &AccountBuilder{addr: NewAddressFromPublicKey(pub), state: NewStateBuilder(kvFactory)}
 }
 
+// TODO: for test
+func NewContractBuilder(address [8]byte, kvFactory storage.KVFactory) *AccountBuilder {
+	return &AccountBuilder{addr: NewAddress(address), state: NewStateBuilder(kvFactory)}
+}
+
 func (ab *AccountBuilder) WithBalance(balance uint) *AccountBuilder {
 	ab.state.SetBalance(balance)
 	return ab

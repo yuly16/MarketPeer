@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"bytes"
 	"strconv"
 
 	"go.dedis.ch/cs438/blockchain/storage"
@@ -14,13 +15,13 @@ type State struct {
 	Nonce       uint       // number of transactions created
 	Balance     uint       // number of Epfer/Fei owned
 	StorageRoot storage.KV // storage state, it is a KV
-	CodeHash    []byte     // codeHash, only for contract account. empty for external account
+	Code    []byte     	   // code, only for contract account. empty for external account
 }
 
 type StateBuilder struct {
 	nonce       uint
 	balance     uint
-	codeHash	[]byte
+	code		[]byte
 	storageRoot storage.KV
 }
 
@@ -46,15 +47,16 @@ func (sb *StateBuilder) SetKV(key string, value interface{}) *StateBuilder {
 }
 
 func (sb *StateBuilder) SetCode(bytecode []byte) *StateBuilder {
-	sb.codeHash = bytecode
+	sb.code = bytecode
 	return sb
 }
+
 func (sb *StateBuilder) Build() *State {
 	s := State{
 		Nonce:       sb.nonce,
 		Balance:     sb.balance,
 		StorageRoot: sb.storageRoot,
-		CodeHash: 	 sb.codeHash,
+		Code: 	 	 sb.code,
 	}
 	return &s
 }
@@ -63,7 +65,7 @@ func NewState(kvFactory storage.KVFactory) *State {
 	s := State{
 		Nonce:    0,
 		Balance:  0,
-		CodeHash: []byte{},
+		Code: 	  []byte{},
 	}
 	s.StorageRoot = kvFactory()
 	return &s
@@ -84,7 +86,7 @@ func (s *State) Hash() string {
 }
 
 func (s *State) Equal(other *State) bool {
-	return s.Code == other.Code &&
+	return bytes.Equal(s.Code, other.Code) &&
 		s.Nonce == other.Nonce && s.Balance == other.Balance && s.StorageRoot.Hash() == other.StorageRoot.Hash()
 
 }
