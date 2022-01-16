@@ -21,6 +21,18 @@ func (a *Account) GetAddr() *Address {
 	return a.addr
 }
 
+func (a *Account) GetNonce() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return int(a.state.Nonce)
+}
+
+func (a *Account) GetBalance() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return int(a.state.Balance)
+}
+
 func (a *Account) GetState() *State {
 	a.mu.Lock()
 	defer a.mu.Unlock()

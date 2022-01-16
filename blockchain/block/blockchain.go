@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"go.dedis.ch/cs438/blockchain/transaction"
 	"sync"
 
 	"go.dedis.ch/cs438/blockchain/storage"
@@ -27,6 +28,18 @@ func NewBlockChain() *BlockChain {
 func NewBlockChainWithGenesis(genesis *Block) *BlockChain {
 	return &BlockChain{blocks: []*Block{genesis},
 		blocksMap: map[string]*Block{genesis.Hash(): genesis}, ends: []*Block{genesis}}
+}
+
+func (bc *BlockChain) Len() int {
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
+	ret := 1
+	ptr := bc.ends[0].Header.ParentHash
+	for ptr != DUMMY_PARENT_HASH {
+		ret += 1
+		ptr = bc.blocksMap[ptr].Header.ParentHash
+	}
+	return ret
 }
 
 // LatestWorldState returns a copy of the world state stored in the last block
@@ -58,6 +71,29 @@ func (bc *BlockChain) LatestWorldState() (storage.KV, *Block, error) {
 //	defer bc.mu.Unlock()
 //	return bc.blocks[len(bc.blocks)-1]
 //}
+
+// hasTxn returns 1. has or not 2. #blocks After
+func (bc *BlockChain) HasTxn(handle transaction.SignedTransactionHandle) (bool, int) {
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
+	nBlocksAfter := 0
+	for _, end := range bc.ends {
+		if end.HasTxn(handle) {
+			return true, 0
+		}
+	}
+	validEnd := bc.ends[0]
+	ptr := validEnd.Header.ParentHash
+	for ptr != DUMMY_PARENT_HASH {
+		nBlocksAfter += 1
+		b := bc.blocksMap[ptr]
+		if b.HasTxn(handle) {
+			return true, nBlocksAfter
+		}
+		ptr = b.Header.ParentHash
+	}
+	return false, -1
+}
 
 // TryAppend test if we could append, if could, return the parent for replay the txns
 func (bc *BlockChain) TryAppend(block *Block) (*Block, error) {

@@ -106,3 +106,19 @@ func (m *Miner) SyncMsgCallback(msg types.Message, pkt transport.Packet) error {
 
 	return nil
 }
+
+func (m *Miner) VerifyTxnMsgCallback(msg types.Message, pkt transport.Packet) error {
+	logger := m.logger.With().Str("callback", "VerifyTransaction").Logger().Level(zerolog.ErrorLevel)
+
+	verifyMsg := msg.(*types.VerifyTransactionMessage)
+	handle := verifyMsg.Handle
+	_, nBlocksAfter := m.chain.HasTxn(handle)
+	reply := &types.VerifyTransactionReplyMessage{handle, nBlocksAfter}
+	if err := m.messaging.Unicast(verifyMsg.NetworkAddr, reply); err != nil {
+		err = fmt.Errorf("verify msg callback error: %w", err)
+		logger.Err(err).Send()
+		return err
+	}
+	logger.Info().Msgf("send back verify txn reply=%s to %s", reply.String(), verifyMsg.NetworkAddr)
+	return nil
+}

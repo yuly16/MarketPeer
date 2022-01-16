@@ -83,6 +83,19 @@ type SignedTransaction struct {
 	Signature []byte
 }
 
+// SignedTransactionHandle used as a handle to find the txn in the chain
+type SignedTransactionHandle struct {
+	Hash string // hash of the signed transaction
+}
+
+func (st *SignedTransactionHandle) String() string {
+	return st.Hash
+}
+
+func (t *SignedTransaction) Hash() string {
+	return hex.EncodeToString(t.HashBytes())
+}
+
 func (t *SignedTransaction) HashBytes() []byte {
 	return hash(t)
 }

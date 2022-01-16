@@ -75,3 +75,50 @@ func (c SyncAccountReplyMessage) String() string {
 func (c SyncAccountReplyMessage) HTML() string {
 	return c.String()
 }
+
+// -----------------------------------------------------------------------------
+// VerifyTransactionMessage
+
+// NewEmpty implements types.Message.
+func (c VerifyTransactionMessage) NewEmpty() Message {
+	return &VerifyTransactionMessage{}
+}
+
+// Name implements types.Message.
+func (c VerifyTransactionMessage) Name() string {
+	return "VerifyTransactionMessage"
+}
+
+// String implements types.Message.
+func (c VerifyTransactionMessage) String() string {
+	return fmt.Sprintf("{VerifyTransactionMessage handle=%v}", c.Handle)
+}
+
+// HTML implements types.Message.
+func (c VerifyTransactionMessage) HTML() string {
+	return c.String()
+}
+
+// -----------------------------------------------------------------------------
+// VerifyTransactionReplyMessage
+
+// NewEmpty implements types.Message.
+func (c VerifyTransactionReplyMessage) NewEmpty() Message {
+	return &VerifyTransactionReplyMessage{}
+}
+
+// Name implements types.Message.
+func (c VerifyTransactionReplyMessage) Name() string {
+	return "VerifyTransactionReplyMessage"
+}
+
+// String implements types.Message.
+func (c VerifyTransactionReplyMessage) String() string {
+	return fmt.Sprintf("{VerifyTransactionReplyMessage handle=%v, blocksAfter=%d}",
+		c.Handle, c.BlocksAfter)
+}
+
+// HTML implements types.Message.
+func (c VerifyTransactionReplyMessage) HTML() string {
+	return c.String()
+}

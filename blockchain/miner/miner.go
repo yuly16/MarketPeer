@@ -96,6 +96,7 @@ func (m *Miner) registerCallbacks() {
 	m.messaging.RegisterMessageCallback(types.WalletTransactionMessage{}, m.WalletTxnMsgCallback)
 	m.messaging.RegisterMessageCallback(types.BlockMessage{}, m.BlockMsgCallback)
 	m.messaging.RegisterMessageCallback(types.SyncAccountMessage{}, m.SyncMsgCallback)
+	m.messaging.RegisterMessageCallback(types.VerifyTransactionMessage{}, m.VerifyTxnMsgCallback)
 
 }
 
