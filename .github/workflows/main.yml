@@ -29,10 +29,11 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
       # Runs a single command using the runners shell
-      - name: Run blockchain test
-        run: go test -v -race -run Test_Network ./blockchain/tests/
       - name: Run chord test
         run: go test -v -race -run Test_Chord ./peer/tests/unit
       - name: Run client test
         run: go test -v -race -run Test_Client ./client/tests/
+      - name: Run blockchain test
+        run: go test -v -race -run Test_Network ./blockchain/tests/
+
 
