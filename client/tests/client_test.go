@@ -93,6 +93,63 @@ func TestSimpleScenario(t *testing.T) {
 	}
 }
 
+func TestProductStorage(t *testing.T) {
+	//var kvFactory storage.KVFactory = storage.CreateSimpleKV
+	transp := channel.NewTransport()
+	nodeNum := 5
+	bitNum := 12
+	nodes := make([]client.Client, nodeNum)
+	for i := 0; i < nodeNum; i++ {
+		sock, err := transp.CreateSocket("127.0.0.1:0")
+		require.NoError(t, err)
+		privateKey, err := crypto.GenerateKey()
+		require.NoError(t, err)
+		nodes[i] = *z.NewClient(t,
+			z.WithSocket(sock),
+			z.WithMessageRegistry(standard.NewRegistry()),
+			z.WithPrivateKey(privateKey),
+			z.WithHeartbeat(time.Millisecond*500),
+			z.WithChordBits(uint(bitNum)),
+			z.WithStabilizeInterval(time.Millisecond*500),
+			z.WithFixFingersInterval(time.Millisecond*250))
+		nodes[i].Start()
+		defer nodes[i].Stop()
+	}
+
+	for i := 1; i < nodeNum; i++ {
+		nodes[i].AddPeers(nodes[i-1].Address)
+	}
+	time.Sleep(time.Second * 7)
+
+	nodes[0].ChordNode.Init(nodes[1].Address)
+	nodes[1].ChordNode.Init(nodes[0].Address)
+
+	for i := 2; i < nodeNum; i++ {
+		fmt.Println(i)
+		require.NoError(t, nodes[i].ChordNode.Join(nodes[i-1].Address))
+	}
+	fmt.Println("chord starts...")
+	time.Sleep(120 * time.Second)
+	fmt.Println("chord ends")
+	orange := client.Product{
+		Name: "orange",
+		Owner: nodes[0].Address,
+		Stock: 1000,
+	}
+	orange_key := HashKey(orange.Name, uint(bitNum))
+	clientNode := nodes[0]
+	fmt.Println("client stores a product")
+	err := clientNode.StoreProduct(orange_key, orange)
+	require.NoError(t, err)
+	time.Sleep(time.Second * 3)
+	fmt.Println("client reads a product")
+	actualOrange, ok := clientNode.ReadProduct(orange_key)
+	require.Equal(t, true, ok)
+	require.Equal(t, orange, actualOrange)
+
+}
+
+
 func betweenRightInclude(id uint, left uint, right uint) bool {
 	return between(id, left, right) || id == right
 }

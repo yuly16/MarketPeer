@@ -39,3 +39,16 @@ func (c *Client) Stop() {
 	c.ChordNode.Stop()
 	c.BlockChainFullNode.Stop()
 }
+
+func (c *Client) StoreProduct(key uint, product Product) error {
+	err := c.ChordNode.Put(key, product)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) ReadProduct(key uint) (Product, bool) {
+	product, ok, _ := c.ChordNode.Get(key)
+	return product.(Product), ok
+}

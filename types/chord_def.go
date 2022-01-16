@@ -45,3 +45,17 @@ type ChordInsertKVMessage struct {
 	Key uint
 	Value interface{}
 }
+
+// ChordAskKVMessage n sends this message to n',
+// n' should give this kv pair into n.
+type ChordAskKVMessage struct {
+	Key uint
+}
+
+// ChordGiveKVMessage n sends this message to n',
+// to give a pair to kv
+type ChordGiveKVMessage struct {
+	Key uint
+	Value interface{}
+	Exist bool
+}

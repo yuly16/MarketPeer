@@ -321,16 +321,15 @@ func Test_Chord_threePeers_transferKey(t *testing.T) {
 	nodes[0].node.Init(nodes[1].node.GetAddr())
 	nodes[1].node.Init(nodes[0].node.GetAddr())
 
-	fmt.Println("chord starts...")
-	time.Sleep(20 * time.Second)
-	fmt.Println("chord ends")
+	time.Sleep(10 * time.Second)
+
 
 	expect := map[uint]interface{}{100:"no", 112:"yes"}
 	empty := map[uint]interface{}{}
 	for k,v := range expect {
 		nodes[0].node.PutId(k,v)
 	}
-	time.Sleep(time.Second * 8)
+	time.Sleep(time.Second * 20)
 
 	require.Equal(t, empty, nodes[0].node.GetChordStorage())
 	require.Equal(t, expect, nodes[1].node.GetChordStorage())

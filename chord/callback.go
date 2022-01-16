@@ -161,3 +161,32 @@ func (c *Chord) ChordInsertKVCallback(msg types.Message, pkt transport.Packet) e
 	c.blockStore.put(kvMsg.Key, kvMsg.Value)
 	return nil
 }
+
+func (c *Chord) ChordAskKVCallback(msg types.Message, pkt transport.Packet) error {
+	kvMsg := msg.(*types.ChordAskKVMessage)
+	value, ok := c.blockStore.get(kvMsg.Key)
+	replyMsg, err := c.msgRegistry.MarshalMessage(
+		types.ChordGiveKVMessage{Key: kvMsg.Key,
+			Value: value,
+			Exist: ok})
+	if err != nil {
+		return err
+	}
+	if errUnicast := c.Messaging.Unicast(pkt.Header.Source, replyMsg); errUnicast != nil {
+		return errUnicast
+	}
+	return nil
+}
+
+func (c *Chord) ChordGiveKVCallback(msg types.Message, pkt transport.Packet) error {
+	kvMsg := msg.(*types.ChordGiveKVMessage)
+	c.chMutex.Lock()
+	if ch, ok := c.acquireKVCh[kvMsg.Key]; ok {
+		ch <- *kvMsg
+	} else {
+		return fmt.Errorf("ChordGiveKVCallback: the channel doesn't exist. ")
+	}
+	c.chMutex.Unlock()
+
+	return nil
+}

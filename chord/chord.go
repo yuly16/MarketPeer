@@ -42,9 +42,12 @@ func NewChord(messager peer.Messaging, conf peer.Configuration) *Chord {
 	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordNotifyMessage{}, chordInstance.ChordNotifyCallback)
 	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordTransferKeyMessage{}, chordInstance.ChordTransferKeyCallback)
 	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordInsertKVMessage{}, chordInstance.ChordInsertKVCallback)
+	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordAskKVMessage{}, chordInstance.ChordAskKVCallback)
+	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordGiveKVMessage{}, chordInstance.ChordGiveKVCallback)
 
 	chordInstance.findSuccessorCh = make(map[uint]chan types.ChordFindSuccessorReplyMessage)
 	chordInstance.askPredecessorCh = make(chan types.ChordReplyPredecessorMessage, 1)
+	chordInstance.acquireKVCh = make(map[uint]chan types.ChordGiveKVMessage)
 
 	chordInstance.blockStore.data = make(map[uint]interface{})
 
@@ -67,6 +70,8 @@ type Chord struct {
 	chMutex             sync.Mutex
 	findSuccessorCh     map[uint]chan types.ChordFindSuccessorReplyMessage
 	askPredecessorCh    chan types.ChordReplyPredecessorMessage
+	acquireKVCh     map[uint]chan types.ChordGiveKVMessage
+
 	fingerTable         *FingerTable
 
 	blockStore          ChordStorage
@@ -276,8 +281,48 @@ func (c *Chord) Lookup(key uint) (string, error) {
 }
 
 
-func (c *Chord) Get(key uint) (interface{}, bool) {
-	return c.blockStore.get(key)
+func (c *Chord) Get(key uint) (interface{}, bool, error) {
+	dest, err := c.findSuccessor(key)
+	if err != nil {
+		return nil, false, err
+	}
+	if c.chordId == c.HashKey(dest) {
+		value, ok := c.blockStore.get(key)
+		return value, ok, nil
+	} else {
+		// create a channel
+		var kvCh chan types.ChordGiveKVMessage
+
+		c.chMutex.Lock()
+		if ch, ok := c.acquireKVCh[key]; ok {
+			kvCh = ch
+		} else {
+			ch := make(chan types.ChordGiveKVMessage, 10)
+			kvCh = ch
+			c.acquireKVCh[key] = kvCh
+		}
+		c.chMutex.Unlock()
+
+
+		// send packet to the owner
+		kvMsg, err := c.msgRegistry.MarshalMessage(
+			types.ChordAskKVMessage{Key: key})
+		if err != nil {
+			return nil, false, err
+		}
+		err1 := c.Messaging.Unicast(dest, kvMsg)
+		if err1 != nil {
+			return nil, false, err1
+		}
+		// waiting for successor of id
+		timer := time.After(20 * time.Second)
+		select {
+		case kvReplyMsg := <- kvCh:
+			return kvReplyMsg.Value, kvReplyMsg.Exist, nil
+		case <-timer:
+			return nil, false, fmt.Errorf("FindSuccessorRemote: waiting for successor time out. ")
+		}
+	}
 }
 
 func (c *Chord) Put(key uint, data interface{}) error {

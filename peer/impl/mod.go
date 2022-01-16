@@ -187,7 +187,8 @@ func (n *node) LookupHashId(key uint) (uint, error) {
 }
 
 func (n *node) Get(key string) (interface{}, bool) {
-	return n.chord.Get(n.chord.HashKey(key))
+	value, exist, _ :=  n.chord.Get(n.chord.HashKey(key))
+	return value, exist
 }
 
 func (n *node) Put(key string, data interface{}) {
@@ -195,7 +196,8 @@ func (n *node) Put(key string, data interface{}) {
 }
 
 func (n *node) GetId(key uint) (interface{}, bool) {
-	return n.chord.Get(key)
+	value, exist, _ := n.chord.Get(key)
+	return value, exist
 }
 
 func (n *node) PutId(key uint, data interface{}) {
