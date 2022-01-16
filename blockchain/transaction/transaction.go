@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	CREATE_CONTRACT = iota
-	EXEC_CONTRACT
+	EXEC_CONTRACT = iota
+	CREATE_CONTRACT
 	EXEC_TXN
 )
 

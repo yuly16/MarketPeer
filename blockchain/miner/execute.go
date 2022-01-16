@@ -216,7 +216,7 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 }
 
 func (m *Miner) createContract(txn *transaction.SignedTransaction, worldState storage.KV) error {
-	bytesBegin := []byte{0,0,0,0}
+	bytesBegin := []byte{0, 0, 0, 0}
 	bytesEnd := make([]byte, 4)
 	_, err := rand.Read(bytesEnd)
 	if err != nil {
@@ -224,10 +224,10 @@ func (m *Miner) createContract(txn *transaction.SignedTransaction, worldState st
 	}
 	address := append(bytesBegin, bytesEnd...)
 	state := account.State{
-		Nonce: 0,
-		Balance: 0,
-		StorageRoot: nil,
-		Code: txn.Txn.Code,
+		Nonce:       0,
+		Balance:     0,
+		StorageRoot: m.kvFactory(),
+		Code:        txn.Txn.Code,
 	}
 	err = worldState.Put(string(address), &state)
 	if err != nil {
