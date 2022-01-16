@@ -105,7 +105,7 @@ func (skv *SimpleKV) String() string {
 		if !ok {
 			continue
 		}
-		ret += fmt.Sprintf("%s->%s", key, value)
+		ret += fmt.Sprintf("%s->%v", key, value)
 		ret += ","
 	}
 
