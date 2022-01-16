@@ -14,6 +14,8 @@ import (
 	"go.dedis.ch/cs438/blockchain/transaction"
 	"go.dedis.ch/cs438/logging"
 	"go.dedis.ch/cs438/types"
+	"math"
+	"time"
 )
 
 type WalletConf struct {
@@ -55,6 +57,8 @@ type Wallet struct {
 
 	publicKey  PublicKey
 	privateKey PrivateKey
+
+	syncFutures map[int]chan *types.SyncAccountReplyMessage // TODO: dont consider evict now
 }
 
 func NewWallet(conf WalletConf) *Wallet {
@@ -64,7 +68,7 @@ func NewWallet(conf WalletConf) *Wallet {
 	w.publicKey = PublicKey{conf.PublicKey, crypto.FromECDSAPub(conf.PublicKey)}
 	w.privateKey = PrivateKey{conf.PrivateKey, crypto.FromECDSA(conf.PrivateKey)}
 	w.account = conf.Account
-
+	w.syncFutures = make(map[int]chan *types.SyncAccountReplyMessage)
 	w.logger = logging.RootLogger.With().Str("Wallet", fmt.Sprintf("%s", conf.Addr)).Logger()
 	w.logger.Info().Msgf("wallet created:\n pubKey=%s, priKey=%s, account=%s",
 		w.publicKey.String(), w.privateKey.String(), w.account.String())
@@ -77,9 +81,64 @@ func (w *Wallet) Start() {}
 
 func (w *Wallet) Stop() {}
 
+func (w *Wallet) GetAccount() *account.Account {
+	return w.account
+}
+
+// VerifyTxn verify if a transaction is valid
+func (w *Wallet) VerifyTxn() error {
+	return nil
+}
+
+func (w *Wallet) SyncAccount() error {
+	// sync account state with neighbors
+	stamp := int(time.Now().UnixMilli())
+
+	syncMsg := &types.SyncAccountMessage{Timestamp: stamp, NetworkAddr: w.addr, Addr: *w.account.GetAddr()}
+	neis := w.messaging.GetNeighbors()
+	neis = append(neis, w.addr)
+	w.logger.Info().Msgf("sync account with neis: %v", neis)
+	future := make(chan *types.SyncAccountReplyMessage, len(neis)+1)
+	w.syncFutures[stamp] = future
+	waitfor := 0
+	for _, nei := range neis {
+		if err := w.messaging.Unicast(nei, syncMsg); err != nil {
+			w.logger.Err(fmt.Errorf("sync account error: %w", err)).Send()
+		}
+		waitfor += 1
+		w.logger.Debug().Msgf("syncMsg unicasted to %s", nei)
+	}
+	waitfor = int(math.Min(3, float64(waitfor)))
+	majority := int(math.Ceil(float64(waitfor) / 2))
+	states := make(map[string]*account.State) // state hash -> states
+	stateCnts := make(map[string]int)         // state hash -> count
+
+	w.logger.Info().Msgf("sync account started to waiting for reply")
+	for i := 0; i < waitfor; i++ {
+		reply := <-future
+		newState := &reply.State
+		newStateHash := newState.Hash()
+		states[newStateHash] = newState
+		if _, ok := stateCnts[newStateHash]; ok {
+			stateCnts[newStateHash] += 1
+		} else {
+			stateCnts[newStateHash] = 1
+		}
+	}
+	for k, v := range stateCnts {
+		if v >= majority {
+			w.logger.Info().Msgf("sync account, %d node agree on the state: %s", v, states[k])
+			w.account.SetState(states[k])
+			return nil
+		}
+	}
+	w.logger.Warn().Msgf("sync account fail, received states: %v", states)
+	return fmt.Errorf("sync account fail, received states: %v", states)
+}
+
 // TransferEpfer to dest
 func (w *Wallet) TransferEpfer(dest account.Account, epfer int) {
-
+	// create a transaction and send
 }
 
 // wallet can submit a transaction
@@ -127,7 +186,7 @@ func (w *Wallet) signTxn(txn transaction.Transaction) transaction.SignedTransact
 }
 
 func (w *Wallet) registerCallbacks() {
-	//w.messaging.RegisterMessageCallback(types.WalletTransactionMessage{}, w.WalletTxnMsgCallback)
+	w.messaging.RegisterMessageCallback(types.SyncAccountReplyMessage{}, w.SyncAccountReplyMessageCallback)
 
 }
 

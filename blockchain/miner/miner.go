@@ -94,8 +94,9 @@ func (m *Miner) submitBlock() {}
 
 func (m *Miner) registerCallbacks() {
 	m.messaging.RegisterMessageCallback(types.WalletTransactionMessage{}, m.WalletTxnMsgCallback)
-
 	m.messaging.RegisterMessageCallback(types.BlockMessage{}, m.BlockMsgCallback)
+	m.messaging.RegisterMessageCallback(types.SyncAccountMessage{}, m.SyncMsgCallback)
+
 }
 
 // ---------------------------------the code is just for testing------------------------

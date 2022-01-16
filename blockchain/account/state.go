@@ -1,7 +1,10 @@
 package account
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strconv"
 
 	"go.dedis.ch/cs438/blockchain/storage"
 )
@@ -79,6 +82,22 @@ func NewState(kvFactory storage.KVFactory) *State {
 
 func (s *State) StorageHash() string {
 	return s.StorageRoot.Hash()
+}
+
+func (s *State) Hash() string {
+	h := sha256.New()
+	h.Write([]byte(strconv.Itoa(int(s.Balance))))
+	h.Write([]byte(strconv.Itoa(int(s.Nonce))))
+	h.Write([]byte(s.Code))
+	h.Write([]byte(s.StorageHash()))
+	return hex.EncodeToString(h.Sum(nil))
+
+}
+
+func (s *State) Equal(other *State) bool {
+	return s.Code == other.Code &&
+		s.Nonce == other.Nonce && s.Balance == other.Balance && s.StorageRoot.Hash() == other.StorageRoot.Hash()
+
 }
 
 func (s *State) String() string {
