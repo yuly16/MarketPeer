@@ -186,20 +186,19 @@ func (n *node) LookupHashId(key uint) (uint, error) {
 	return n.chord.HashKey(destination), err
 }
 
-func (n *node) Get(key string) (string, bool) {
-	// TODO: implemented when blockchain and smart contract finishes
-	return "", true
+func (n *node) Get(key string) (interface{}, bool) {
+	return n.chord.Get(n.chord.HashKey(key))
 }
 
-func (n *node) Put(key string, data uint) {
-	// TODO: implemented when blockchain and smart contract finishes
+func (n *node) Put(key string, data interface{}) {
+	n.chord.Put(n.chord.HashKey(key), data)
 }
 
-func (n *node) GetId(key uint) (uint, bool) {
+func (n *node) GetId(key uint) (interface{}, bool) {
 	return n.chord.Get(key)
 }
 
-func (n *node) PutId(key uint, data uint) {
+func (n *node) PutId(key uint, data interface{}) {
 	n.chord.Put(key, data)
 }
 
@@ -232,6 +231,9 @@ func (n *node) GetSuccessor() uint {
 	return n.chord.HashKey(n.chord.GetSuccessor())
 }
 
+func (n* node) GetChordStorage() map[uint]interface{} {
+	return n.chord.OutputStorage()
+}
 func (n *node) searchAllFromNei(reg regexp.Regexp, budget uint, timeout time.Duration) ([]string, error) {
 	if !n.hasNeighbor() {
 		return []string{}, nil

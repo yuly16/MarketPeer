@@ -13,5 +13,5 @@ var RootLogger zerolog.Logger = zerolog.New(
 		func(w *zerolog.ConsoleWriter) {
 			zerolog.TimeFieldFormat = time.RFC3339Nano
 			w.TimeFormat = "15:04:05.000"
-		})).Level(zerolog.InfoLevel).
+		})).Level(zerolog.ErrorLevel).
 	With().Timestamp().Logger()

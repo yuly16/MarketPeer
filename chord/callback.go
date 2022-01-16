@@ -135,8 +135,29 @@ func (c *Chord) ChordNotifyCallback(msg types.Message, pkt transport.Packet) err
 		between(nStarId, c.HashKey(predecessor), c.chordId) {
 		c.predecessor.write(nStar)
 		//log.Debug().Msgf("NotifyCallback: %d receives %d as predecessor\n", c.chordId, nStarId)
+		// transfer key
+		if predecessor != "" {
+			err := c.transferKey(nStar, c.HashKey(predecessor), nStarId)
+			if err != nil {
+				return err
+			}
+		}
+
 	}
 	return nil
 }
 
 
+func (c *Chord) ChordTransferKeyCallback(msg types.Message, pkt transport.Packet) error {
+	transferKeyMsg := msg.(*types.ChordTransferKeyMessage)
+	for k, v := range transferKeyMsg.Data {
+		c.blockStore.put(k, v)
+	}
+	return nil
+}
+
+func (c *Chord) ChordInsertKVCallback(msg types.Message, pkt transport.Packet) error {
+	kvMsg := msg.(*types.ChordInsertKVMessage)
+	c.blockStore.put(kvMsg.Key, kvMsg.Value)
+	return nil
+}

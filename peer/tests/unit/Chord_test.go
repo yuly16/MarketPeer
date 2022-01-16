@@ -294,6 +294,127 @@ func Test_Chord_tenPeers_lookup(t *testing.T) {
 	}
 }
 
+// test 5 test transfer key
+func Test_Chord_threePeers_transferKey(t *testing.T) {
+	transp := channel.NewTransport()
+	// this test is forbidden to use udp!
+	//transp := udp.NewUDP()
+	nodeNum := 3
+	bitNum := 7
+	ip2node := map[uint]NodeWarp{}
+	nodes := make([]NodeWarp, nodeNum)
+	for i := 0; i < nodeNum; i++ {
+		nodes[i].node = z.NewTestNode(t, peerFac, transp,
+			"127.0.0.1:0",
+			z.WithHeartbeat(time.Millisecond*500),
+			z.WithChordBits(uint(bitNum)),
+			z.WithStabilizeInterval(time.Millisecond*500),
+			z.WithFixFingersInterval(time.Millisecond*250))
+		nodes[i].id = nodes[i].node.GetChordId()
+		ip2node[nodes[i].node.GetChordId()] = nodes[i]
+		defer nodes[i].node.Stop()
+	}
+
+	// initialize table
+	for i := 0; i < nodeNum - 1; i++ {
+		nodes[i].node.AddPeer(nodes[i+1].node.GetAddr())
+	}
+	time.Sleep(6 * time.Second)
+
+	nodes[0].node.Init(nodes[1].node.GetAddr())
+	nodes[1].node.Init(nodes[0].node.GetAddr())
+
+	fmt.Println("chord starts...")
+	time.Sleep(10 * time.Second)
+	fmt.Println("chord ends")
+
+	expect := map[uint]interface{}{100:"no", 112:"yes"}
+	empty := map[uint]interface{}{}
+	for k,v := range expect {
+		nodes[0].node.PutId(k,v)
+	}
+	time.Sleep(time.Second * 2)
+
+	require.Equal(t, empty, nodes[0].node.GetChordStorage())
+	require.Equal(t, expect, nodes[1].node.GetChordStorage())
+
+	for i := 2; i < nodeNum; i++ {
+		require.NoError(t, nodes[i].node.Join(nodes[i-1].node.GetAddr()))
+	}
+	time.Sleep(time.Second * 2)
+	require.Equal(t, nodes[0].node.GetChordStorage(), empty)
+	require.Equal(t, nodes[1].node.GetChordStorage(), empty)
+	require.Equal(t, nodes[2].node.GetChordStorage(), expect)
+}
+
+// test 6 test transfer key
+func Test_Chord_tenPeers_transferKey(t *testing.T) {
+	transp := channel.NewTransport()
+	// this test is forbidden to use udp!
+	//transp := udp.NewUDP()
+	nodeNum := 10
+	bitNum := 12
+	ip2node := map[uint]NodeWarp{}
+	nodes := make([]NodeWarp, nodeNum)
+	for i := 0; i < nodeNum; i++ {
+		nodes[i].node = z.NewTestNode(t, peerFac, transp,
+			"127.0.0.1:0",
+			z.WithHeartbeat(time.Millisecond*500),
+			z.WithChordBits(uint(bitNum)),
+			z.WithStabilizeInterval(time.Millisecond*500),
+			z.WithFixFingersInterval(time.Millisecond*250))
+		nodes[i].id = nodes[i].node.GetChordId()
+		ip2node[nodes[i].node.GetChordId()] = nodes[i]
+		defer nodes[i].node.Stop()
+	}
+
+	// initialize table
+	for i := 0; i < nodeNum - 1; i++ {
+		nodes[i].node.AddPeer(nodes[i+1].node.GetAddr())
+	}
+	time.Sleep(6 * time.Second)
+
+	nodes[0].node.Init(nodes[1].node.GetAddr())
+	nodes[1].node.Init(nodes[0].node.GetAddr())
+
+	time.Sleep(10 * time.Second)
+
+	fmt.Println("push kv...")
+
+	for i := 0; i < 1 << bitNum; i = i + 1 << 3 {
+		nodes[0].node.PutId(uint(i), i)
+	}
+
+
+	time.Sleep(time.Second * 5)
+	for i := 0; i < nodeNum; i++ {
+		fmt.Println(nodes[i].node.GetChordStorage())
+	}
+	fmt.Println("joining new node...")
+	for i := 2; i < nodeNum; i++ {
+		require.NoError(t, nodes[i].node.Join(nodes[i-1].node.GetAddr()))
+	}
+
+	fmt.Println("getting...")
+	for i := 0; i < 1 << bitNum; i = i + 1 << 3 {
+		fmt.Printf("get %d\n",i)
+		dest, err := nodes[0].node.LookupHashId(uint(i))
+		if err != nil {
+			require.Error(t, err)
+		}
+		res, exists := ip2node[dest].node.GetId(uint(i))
+		require.Equal(t, exists, true)
+
+		switch res.(type) {
+		case int:
+			require.Equal(t, i, res)
+		case float64:
+			require.Equal(t, i, int(res.(float64)))
+		}
+	}
+
+
+}
 
 func betweenRightInclude(id uint, left uint, right uint) bool {
 	return between(id, left, right) || id == right

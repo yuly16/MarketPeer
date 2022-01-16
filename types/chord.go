@@ -116,3 +116,50 @@ func (c ChordNotifyMessage) String() string {
 func (c ChordNotifyMessage) HTML() string {
 	return c.String()
 }
+
+
+// -----------------------------------------------------------------------------
+// ChordTransferKeyMessage
+
+// NewEmpty implements types.Message.
+func (c ChordTransferKeyMessage) NewEmpty() Message {
+	return &ChordTransferKeyMessage{}
+}
+
+// Name implements types.Message.
+func (c ChordTransferKeyMessage) Name() string {
+	return "chordtransferkeymessage"
+}
+
+// String implements types.Message.
+func (c ChordTransferKeyMessage) String() string {
+	return fmt.Sprintf("{ChordTransferKeyMessage}")
+}
+
+// HTML implements types.Message.
+func (c ChordTransferKeyMessage) HTML() string {
+	return c.String()
+}
+
+// -----------------------------------------------------------------------------
+// ChordTransferKeyMessage
+
+// NewEmpty implements types.Message.
+func (c ChordInsertKVMessage) NewEmpty() Message {
+	return &ChordInsertKVMessage{}
+}
+
+// Name implements types.Message.
+func (c ChordInsertKVMessage) Name() string {
+	return "chordinsertkvmessage"
+}
+
+// String implements types.Message.
+func (c ChordInsertKVMessage) String() string {
+	return fmt.Sprintf("{ChordInsertKVMessage}")
+}
+
+// HTML implements types.Message.
+func (c ChordInsertKVMessage) HTML() string {
+	return c.String()
+}

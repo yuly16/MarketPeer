@@ -19,7 +19,7 @@ import (
 
 
 func NewChord(messager peer.Messaging, conf peer.Configuration) *Chord {
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	zerolog.SetGlobalLevel(zerolog.ErrorLevel)
 
 	chordInstance := Chord{}
 	chordInstance.conf = conf
@@ -40,11 +40,13 @@ func NewChord(messager peer.Messaging, conf peer.Configuration) *Chord {
 	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordAskPredecessorMessage{}, chordInstance.ChordAskPredecessorCallback)
 	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordReplyPredecessorMessage{}, chordInstance.ChordReplyPredecessorCallback)
 	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordNotifyMessage{}, chordInstance.ChordNotifyCallback)
+	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordTransferKeyMessage{}, chordInstance.ChordTransferKeyCallback)
+	chordInstance.msgRegistry.RegisterMessageCallback(types.ChordInsertKVMessage{}, chordInstance.ChordInsertKVCallback)
 
 	chordInstance.findSuccessorCh = make(map[uint]chan types.ChordFindSuccessorReplyMessage)
 	chordInstance.askPredecessorCh = make(chan types.ChordReplyPredecessorMessage, 1)
 
-	chordInstance.blockStore.data = make(map[uint]uint)
+	chordInstance.blockStore.data = make(map[uint]interface{})
 
 	return &chordInstance
 }
@@ -274,12 +276,29 @@ func (c *Chord) Lookup(key uint) (string, error) {
 }
 
 
-func (c *Chord) Get(key uint) (uint, bool) {
+func (c *Chord) Get(key uint) (interface{}, bool) {
 	return c.blockStore.get(key)
 }
 
-func (c *Chord) Put(key uint, data uint) {
-	c.blockStore.put(key, data)
+func (c *Chord) Put(key uint, data interface{}) error {
+	dest, err := c.findSuccessor(key)
+	if err != nil {
+		return err
+	}
+	if c.chordId == c.HashKey(dest) {
+		c.blockStore.put(key, data)
+	} else {
+		kvMsg, err := c.msgRegistry.MarshalMessage(
+			types.ChordInsertKVMessage{Key: key, Value: data})
+		if err != nil {
+			return err
+		}
+		err1 := c.Messaging.Unicast(dest, kvMsg)
+		if err1 != nil {
+			return err1
+		}
+	}
+	return nil
 }
 
 func (c *Chord) GetChordId() uint{
@@ -308,6 +327,28 @@ func (c *Chord) GetFingerTable() []uint {
 	return res
 }
 
+// just for test
+func (c *Chord) OutputStorage() map[uint]interface{} {
+	c.blockStore.Lock()
+	data :=  c.blockStore.data
+	c.blockStore.Unlock()
+	return data
+}
+
+func (c *Chord) transferKey(dest string, begin uint, end uint) error {
+	data := c.blockStore.findBetweenRightInclude(begin, end)
+	transferMsg,err := c.msgRegistry.MarshalMessage(
+		types.ChordTransferKeyMessage{Data: data})
+	if err != nil {
+		return err
+	}
+	err1 := c.Messaging.Unicast(dest, transferMsg)
+	if err1 != nil {
+		return err1
+	}
+	c.blockStore.deleteBetweenRightInclude(begin, end)
+	return nil
+}
 
 func (c *Chord) isKilled() bool {
 	return atomic.LoadInt32(&c.stat) == KILL
