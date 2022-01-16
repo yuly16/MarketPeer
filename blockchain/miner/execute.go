@@ -22,6 +22,10 @@ func (m *Miner) doExecuteTxn(txn *transaction.SignedTransaction, worldState stor
 		return m.doContract(txn, worldState)
 	} else if txn.Txn.Type == transaction.CREATE_CONTRACT {
 		// create a transaction
+		err := m.createContract(txn, worldState)
+		if err != nil {
+			return fmt.Errorf("create contract error: %w", err)
+		}
 		return nil
 	} else {
 		// value transfer
@@ -69,5 +73,28 @@ func (m *Miner) doValueTransfer(txn *transaction.SignedTransaction, worldState s
 
 func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storage.KV) error {
 
+	return nil
+}
+
+func (m *Miner) createContract(txn *transaction.SignedTransaction, worldState storage.KV) error {
+	//bytesBegin := []byte{0,0,0,0}
+	//bytes := make([]byte, 4)
+	//bytesEnd, err := rand.Read(bytes)
+	//if err != nil {
+	//	return err
+	//}
+	//value, err := worldState(txn.Txn.From.String())
+	//if err != nil {
+	//	return fmt.Errorf("from address dont exist: %w", err)
+	//}
+	//contractState, ok := value.(*account.State)
+	//if !ok {
+	//	return fmt.Errorf("contract state is corrupted: %v", contractState)
+	//}
+	//contractState.Code = txn.Txn.Code
+	//
+	//if err = worldState.Put(txn.Txn.From.String(), contractState); err != nil {
+	//	return fmt.Errorf("cannot put contract addr and state to KV: %w", err)
+	//}
 	return nil
 }
