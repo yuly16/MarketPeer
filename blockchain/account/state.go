@@ -11,11 +11,12 @@ type State struct {
 	Nonce       uint       // number of transactions created
 	Balance     uint       // number of Epfer/Fei owned
 	StorageRoot storage.KV // storage state, it is a KV
-	CodeHash    string     // codeHash, only for contract account. empty for external account
+	CodeHash    []byte     // codeHash, only for contract account. empty for external account
 }
 
 type StateBuilder struct {
 	balance     uint
+	codeHash	[]byte
 	storageRoot storage.KV
 }
 
@@ -35,11 +36,16 @@ func (sb *StateBuilder) SetKV(key string, value interface{}) *StateBuilder {
 	return sb
 }
 
+func (sb *StateBuilder) SetCode(bytecode []byte) *StateBuilder {
+	sb.codeHash = bytecode
+	return sb
+}
 func (sb *StateBuilder) Build() *State {
 	s := State{
 		Nonce:       0,
 		Balance:     sb.balance,
 		StorageRoot: sb.storageRoot,
+		CodeHash: 	 sb.codeHash,
 	}
 	return &s
 }
@@ -48,7 +54,7 @@ func NewState(kvFactory storage.KVFactory) *State {
 	s := State{
 		Nonce:    0,
 		Balance:  0,
-		CodeHash: "",
+		CodeHash: []byte{},
 	}
 	s.StorageRoot = kvFactory()
 	return &s

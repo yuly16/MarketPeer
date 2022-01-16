@@ -9,7 +9,8 @@ import (
 type SmartContract interface {
 	// Execute directly runs the contract code segment, 
 	// and ensures the desired property.
-	Execute() (error)
+	// implemented in miner/execute.go
+	// Execute() (error)
 
 	String() (string)
 
@@ -18,5 +19,9 @@ type SmartContract interface {
 	ValidateAssumptions(storage.KV) (bool, error)
 
 	CollectActions(storage.KV) ([]parser.Action, error)
+
+	GetProposerAccount() (string)
+	
+	GetAcceptorAccount() (string)
 }
 

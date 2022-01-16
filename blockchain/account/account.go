@@ -43,6 +43,11 @@ func (ab *AccountBuilder) WithKV(key string, value interface{}) *AccountBuilder 
 	return ab
 }
 
+func (ab *AccountBuilder) WithCode(bytecode []byte) *AccountBuilder {
+	ab.state.SetCode(bytecode)
+	return ab
+}
+
 func (ab *AccountBuilder) Build() *Account {
 	return &Account{ab.addr, ab.state.Build()}
 }

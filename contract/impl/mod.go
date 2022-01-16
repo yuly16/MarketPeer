@@ -75,6 +75,14 @@ func (c *Contract) GetStateAST() *StateNode {
 	return c.State_tree
 }
 
+func (c *Contract) GetProposerAccount() string {
+	return c.Proposer_account
+}
+
+func (c *Contract) GetAcceptorAccount() string {
+	return c.Acceptor_account
+}
+
 // Check the condition from the world state of the underlying blockchain
 func (c *Contract) ValidateCondition(condition parser.Condition, worldState storage.KV) (bool, error) {
 	role := condition.Object.Role
@@ -231,12 +239,6 @@ func (c *Contract) CollectActions(worldState storage.KV) ([]parser.Action, error
 	return execute_actions, nil
 }
 
-// Construct transaction instance with the collected actions
-// func ActionToTranx() {
-
-// }
-
-
 // DisplayAST displays the code AST, convenient for debug
 func DisplayAST(ast parser.Code) string {
 	root := gotree.New("Code")
@@ -275,6 +277,4 @@ func (c Contract) String() string {
 
 	return out.String()
 }
-
-
 

@@ -2,12 +2,17 @@ package tests
 
 import (
 	"fmt"
+	"crypto/ecdsa"
+
+	"go.dedis.ch/cs438/transport/channel"
 	"github.com/alecthomas/participle/v2"
 	"testing"
 	"github.com/stretchr/testify/require"
 	"go.dedis.ch/cs438/blockchain/storage"
 	"go.dedis.ch/cs438/contract/parser"
 	"go.dedis.ch/cs438/contract/impl"
+	"go.dedis.ch/cs438/blockchain/block"
+	z "go.dedis.ch/cs438/internal/testing"
 )
 
 // Unit tests of the Smart contract functionalities
@@ -283,7 +288,7 @@ func Test_Parser_Ifclause(t *testing.T) {
 
 	if_strings := []string{
 		`IF buyer.balance > 10.5 THEN
-		 	buyer.transfer("seller_id", 1.25)
+			buyer.transfer("seller_id", 1.25)
 			seller.send("seller_id", "product_id", 50)
 		`,
 	}
@@ -640,9 +645,68 @@ func Test_Contract_Execution_IfClause(t *testing.T) {
 	actions, err := contract_inst.CollectActions(worldState)
 	require.NoError(t, err)
 	require.Equal(t, expected_actions, actions)
-	// fmt.Println(actions)
-	// fmt.Println(*actions[0].Params[0].String)
-	// fmt.Println(*actions[0].Params[1].Number)
-
 }
 
+func Test_Contract_Execution_Network(t *testing.T) {
+	transp := channel.NewTransport()
+	
+	acc_buyer, pri_buyer := accountFactory(105, "apple", 5)
+	acc_seller, pri_seller := accountFactory(5, "apple", 10)
+
+	// simulate the process to create contract account (from buyer's side)
+	contract_code := `
+		ASSUME seller.balance > 100
+		IF buyer.balance > 10 THEN
+		 	buyer.transfer(5)
+			seller.send("apple", 5)
+	`
+	contract_inst := impl.NewContract(
+		"1", // contract_id
+		"Test contract execution", // contract_name
+		contract_code, // plain_code
+		"127.0.0.1", // proposer_addr
+		acc_buyer.GetAddr().String(), // proposer_account
+		"127.0.0.2", // acceptor_addr
+		acc_seller.GetAddr().String(), // acceptor_account
+	)
+	contract_bytecode, err := contract_inst.Marshal()
+	require.NoError(t, err)
+	acc_contract, pri_contract := contractFactory(0, contract_bytecode)
+
+	genesisFactory := func() *block.Block {
+		return generateGenesisBlock(storage.CreateSimpleKV, acc_buyer, acc_seller, acc_contract)
+	}
+
+	nodeFactory := func(acc *account.Account, pri *ecdsa.PrivateKey) *blockchain.FullNode {
+		sock, err := transp.CreateSocket("127.0.0.1:0")
+		require.NoError(t, err)
+		fullNode, _ := z.NewTestFullNode(t,
+			z.WithSocket(sock),
+			z.WithMessageRegistry(standard.NewRegistry()),
+			z.WithPrivateKey(pri),
+			z.WithAccount(acc),
+			z.WithGenesisBlock(genesisFactory()),
+		)
+		return fullNode
+	}
+
+	node1 := nodeFactory(acc_buyer, pri_buyer)
+	node2 := nodeFactory(acc_seller, pri_seller)
+	node1.AddPeer(node2)
+	node2.AddPeer(node1)
+
+	node1.Start()
+	node2.Start()
+	time.Sleep(200 * time.Millisecond)
+
+	// trigger the contract from the seller side to contract account
+	txn := transaction.NewTransaction(0, 0, *node2.GetAccountAddr(), contract_account.GetAccountAddr())
+	node2.SubmitTxn(txn)
+
+	time.Sleep(10 * time.Second)
+	fmt.Printf("node1 chain: \n%s", node1.GetChain())
+	fmt.Printf("node2 chain: \n%s", node2.GetChain())
+
+	node1.Stop()
+	node2.Stop()
+}
