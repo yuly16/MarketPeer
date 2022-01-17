@@ -8,6 +8,7 @@
 
 - Blockchain stores the digial assets and digital currencies; Regulate the transaction exeution and verification; a "ledger"
 - DHT stores all other metadatas. Like the mapping between network address and account address, owner list of each product, product list of each owner, etc.
+- Smart Contract provides application-level API for the end users. It allows the users to specify contract code, propose contract to blockchain and execute it automatically.
 
 ### Messager
 
@@ -47,7 +48,6 @@ type Wallet interface {
   ProposeContract(code string) (string, error)
   TriggerContract(dest account.Address) error
 }
-
 ```
 
 - `SyncAccount` acts like a *refresh*, which will fetch the latest account state from the blockchain. `ShowAccount` just shows the synced Account information, like digital balance and digital assets.
@@ -67,6 +67,72 @@ The miners are the key components of the blockchain network, they are responsibl
 - verify the blocks broadcasted by other miners
 
 As we adopt ethereum-alike blockchain network. The biggest difference from Bitcoin block is that it also contains the `WorldState`, which is a mapping between `AccountAddress` and `AccountState`. The `AccountState` is also a KV representing the digial assets. Further, we make serveral simplified assumptions: (1) the difficulty of the network is fixed, not dynamically adapted; (2) use hash map rather than Merkle tree as the KV interface. To faciliate above functionalites, we also define a new message: `BlockMessage` which is used to broadcast the block to other miners.
+
+
+
+## Smart Contract Architecture & Functionalities
+
+### Contract Code
+
+To make the smart contract "minimum viable", we define a set of primitives to formulate the contract code language. It was designed specifically for this application: execute a set of actions as an independent transaction, according to some conditions. The language mainly consists of two types of operations:
+
+- `ASSUME` makes assumptions of the contract. It represents preconditions to execute the contract. Contract execution is performed only when all assumption conditions are met. Usually, the proposer may have requirements for the balance in the seller's account. In the example below, `ASSUME seller.balance > 50` requires at least 50 balance in seller's account.
+- `IF-THEN` claims the if clauses of the contract. It consists of conditions and several items of actions. We use reserved words like `seller`, `buyer` here to be replaced with account addresses. In the example below, we make sure that transfer and shipment actions are both performed. It deals with the need of a trusted third party in decentralized application scenario.
+
+```
+ASSUME seller.balance > 50
+IF seller.reputation > 80 THEN
+ 	buyer.transfer(100)
+	seller.send("book", 2)
+```
+
+In our application, users can write their contract code and propose it. Then will we process the contract as other types of interpreted language: `Lexer` to split tokens, `Parser` to parse the code to abstract syntax tree (AST), and `Interpreter` to evaluate the AST. The figure below shows the interpretation process of If clauses in the AST.
+
+- `Lexer` converts the high-level input program into a sequence of tokens. We predefine the form of each type of tokens with regular expression.
+- `Parser` performs syntax analysis on the lexical analysis result. We construct the parser given the BNF of contract language. Parser will output the AST as the structured code.
+- `Interpreter` traverse the AST and generate the expected output. In our case, the interpreter checks the conditions and collects satisfied actions as the blockchain transaction.
+
+![64244823835](ast.png)
+
+### Contract Structure
+
+Contract implements the interface of the SmartContract. Blockchain miners can perform contract creation and contract execution transactions, with the APIs provided by SmartContract.
+
+```go
+type SmartContract interface {
+    GetProposerAccount() (string)
+    GetAcceptorAccount() (string)
+    ValidateAssumptions(storage.KV) (bool, error)
+    CollectActions(storage.KV) ([]Action, error)
+}
+
+type Contract struct {
+    contract.SmartContract
+    Proposer_account string
+    Acceptor_account string
+    Code_plain_text		string
+    Code_ast					 parser.Code
+    Code_state_tree		StateTree
+    ...
+}
+```
+
+- `ValidateAssumptions` checks the assumption conditions given the world state of the blockchain. `CollectActions` collects all satisfied actions to encapsulate in the blockchain transaction. They jointly support the contract execution in the blockchain.
+- `Proposer_account` and `Acceptor_account` specifies the address of two parties. The two fields are required when proposing the contract to blockchain.
+- `Code_ast` stores the AST parsed from `Code_plain_text`. We also construct a corresponding `Code_state_tree` to trace the state of each node in the AST.
+
+### Contract Execution
+
+We explain the process of contract execution with the figure below. Miners are omitted for simplicity.
+
+![xecutio](execution.png)
+
+1. `Propose Contract`: After retrieving the product information from DHT, the buyer can write the contract code and propose it to blockchain. A `CREATE_CONTRACT` transaction is submitted, and some miner will create the contract account in the blockchain.
+2. `Inform Contract`: The proposer will receive the contract account address so that he can inform the seller of the contract. To validate the contract content, the seller would prefer to view it in the blockchain by itself.
+3. `Accept Contract`: Once the seller is satisfied with the contract, it can trigger the contract execution by submitting a `EXEC_CONTRACT` transaction.
+4. `Execute Contract`: Supported with `SmartContract` APIs, any miner can execute the contract code then submit the state change. Since the execution is supported by blockchain transaction, features like **immutability** and **global distributability** are satisfied.
+
+
 
 ## Fine-grained team contribution
 
@@ -105,7 +171,7 @@ Main contribution is highlighted with bold text.
   - attacker cannot rule the network. as long as it is below 51%
   - 51% attack
 
-- - 
+- - ​
 
 
 
