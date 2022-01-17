@@ -1,0 +1,2 @@
+[90m04:44:00.056[0m [1m[31mERR[0m[0m  [31merror=[0m[31m"sync msg error: key not found"[0m [36mMiner=[0m127.0.0.1:55745 [36mcallback=[0mSyncAccount
+[90m04:44:00.056[0m [1m[31mERR[0m[0m error while processing the packet [31merror=[0m[31m"failed to call handler: sync msg error: key not found"[0m [36mMessager=[0m127.0.0.1:53367
