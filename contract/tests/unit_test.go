@@ -705,7 +705,7 @@ func Test_Contract_Execution_Network(t *testing.T) {
 
 	// trigger the contract from the seller side to contract account
 	txn := transaction.NewTransaction(0, 0, *node2.GetAccountAddr(), *acc_contract.GetAddr())
-	node2.SubmitTxn(txn)
+	node1.SubmitTxn(txn)
 
 	time.Sleep(10 * time.Second)
 	fmt.Printf("node1 chain: \n%s", node1.GetChain())

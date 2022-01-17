@@ -205,7 +205,7 @@ func (m *Messager) Unicast(dest string, msg transport.Message) error {
 
 	nextDest, err := m.send(pkt)
 	if err != nil {
-		err = fmt.Errorf("Unicast error: %w", err)
+		err = fmt.Errorf("Unicast error: %w, msg=%s", err, msg.String())
 		m.Err(err).Send()
 	}
 	m.Debug().Str("dest", dest).Str("nextDest", nextDest).Str("msg", msg.String()).Str("pkt", pkt.String()).Msg("unicast packet sended")

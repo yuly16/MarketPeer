@@ -211,8 +211,10 @@ func (c *Chord) Join(member string) error {
 }
 
 func (c *Chord) Init(member string) {
-	if c.successor.read() == "" && c.predecessor.read() == "" {
+	if c.successor.read() == "" {
 		c.successor.write(member)
+	}
+	if c.predecessor.read() == "" {
 		c.predecessor.write(member)
 	}
 }
@@ -283,6 +285,7 @@ func (c *Chord) Lookup(key uint) (string, error) {
 
 func (c *Chord) Get(key uint) (interface{}, bool, error) {
 	dest, err := c.findSuccessor(key)
+	fmt.Printf("dest is %s\n", dest)
 	if err != nil {
 		return nil, false, err
 	}

@@ -6,6 +6,7 @@ require (
 	github.com/alecthomas/participle/v2 v2.0.0-alpha7
 	github.com/disiqueira/gotree v1.0.0
 	github.com/ethereum/go-ethereum v1.10.15
+	github.com/manifoldco/promptui v0.9.0
 	github.com/rs/xid v1.2.1
 	github.com/rs/zerolog v1.20.0
 	github.com/stretchr/testify v1.7.0
@@ -15,6 +16,7 @@ require (
 
 require (
 	github.com/btcsuite/btcd v0.20.1-beta // indirect
+	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

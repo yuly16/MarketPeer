@@ -2,10 +2,11 @@ package impl
 
 import (
 	"fmt"
-	"github.com/rs/zerolog"
 	"math/rand"
 	"regexp"
 	"strings"
+
+	"github.com/rs/zerolog"
 
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/transport"
@@ -195,7 +196,7 @@ func (m *Messager) StatusMsgCallback(msg types.Message, pkt transport.Packet) er
 		for _, rus := range meExceptOther {
 			otherMissingRumors = append(otherMissingRumors, rus...)
 		}
-		_rumorsMsg := types.RumorsMessage{Rumors: otherMissingRumors}
+		_rumorsMsg := types.RumorsMessage{Rumors: otherMissingRumors[:10]}
 		rumorsMsg, err := m.msgRegistry.MarshalMessage(&_rumorsMsg)
 		if err != nil {
 			m.Err(err).Send()

@@ -1,7 +1,6 @@
 package miner
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 
@@ -85,6 +84,16 @@ func RetrieveState(address string, worldState storage.KV) (*account.State, error
 	return state, nil
 }
 
+func NumericToFloat(num interface{}) (float64, bool) {
+	if num_float, ok := num.(float64); ok {
+		return num_float, true
+	} else if num_int, ok := num.(int); ok {
+		return float64(num_int), true
+	} else {
+		return 0, false
+	}
+}
+
 // Contract execution logistics
 // Type casting problem: need send(string, int)
 func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storage.KV) error {
@@ -100,6 +109,12 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 	unmarshal_err := json.Unmarshal(contract_bytecode, &contract_inst)
 	if unmarshal_err != nil {
 		return fmt.Errorf("unmarshal contract byte code error: %w", unmarshal_err)
+	}
+
+	// we need to first check whether or not triggered by acceptor account
+	// otherwise, the transaction will not be executed
+	if txn.Txn.From.String() != contract_inst.GetAcceptorAccount() {
+		return fmt.Errorf("contract not triggered by acceptor: %s", txn.Txn.From.String())
 	}
 
 	// 2. check conditions and collect actions in contract
@@ -148,8 +163,7 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 				if err != nil {
 					return err
 				}
-				amount_hold_int, ok := amount_hold.(int)
-				amount_hold_float := float64(amount_hold_int)
+				amount_hold_float, ok := NumericToFloat(amount_hold)
 				if !ok {
 					return fmt.Errorf("cannot cast to float: %v", amount_hold)
 				}
@@ -163,8 +177,7 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 				if err != nil {
 					acceptor_state.StorageRoot.Put(send_product, send_amount)
 				} else {
-					amount_acceptor_int, ok := amount_acceptor.(int)
-					amount_acceptor_float := float64(amount_acceptor_int)
+					amount_acceptor_float, ok := NumericToFloat(amount_acceptor)
 					if !ok {
 						return fmt.Errorf("cannot cast to float: %v", amount_acceptor)
 					}
@@ -175,10 +188,9 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 				if err != nil {
 					return err
 				}
-				amount_hold_int, ok := amount_hold.(int)
-				amount_hold_float := float64(amount_hold_int)
+				amount_hold_float, ok := NumericToFloat(amount_hold)
 				if !ok {
-					return fmt.Errorf("cannot cast to float: %v", amount_hold)
+					return fmt.Errorf("cannot cast to float: %T", amount_hold)
 				}
 				if amount_hold_float < send_amount {
 					return fmt.Errorf("do not have enough product: %s", send_product)
@@ -190,8 +202,7 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 				if err != nil {
 					proposer_state.StorageRoot.Put(send_product, send_amount)
 				} else {
-					amount_acceptor_int, ok := amount_acceptor.(int)
-					amount_acceptor_float := float64(amount_acceptor_int)
+					amount_acceptor_float, ok := NumericToFloat(amount_acceptor)
 					if !ok {
 						return fmt.Errorf("cannot cast to float: %v", amount_acceptor)
 					}
@@ -208,26 +219,18 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 		return fmt.Errorf("cannot put acceptor addr and state to KV: %w", err_put_acceptor)
 	}
 	proposer_state.Nonce += 1
-	fmt.Println("Completed")
 
 	return nil
 }
 
 func (m *Miner) createContract(txn *transaction.SignedTransaction, worldState storage.KV) error {
-	bytesBegin := []byte{0, 0, 0, 0}
-	bytesEnd := make([]byte, 4)
-	_, err := rand.Read(bytesEnd)
-	if err != nil {
-		return err
-	}
-	address := append(bytesBegin, bytesEnd...)
 	state := account.State{
 		Nonce:       0,
 		Balance:     0,
 		StorageRoot: m.kvFactory(),
 		Code:        txn.Txn.Code,
 	}
-	err = worldState.Put(string(address), &state)
+	err := worldState.Put(txn.Txn.To.String(), &state)
 	if err != nil {
 		return fmt.Errorf("put contract error: %w", err)
 	}
