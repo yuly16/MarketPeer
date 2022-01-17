@@ -23,6 +23,7 @@ func main() {
 		z.WithMessageRegistry(standard.NewRegistry()),
 		z.WithPrivateKey(privateKey),
 		z.WithHeartbeat(time.Millisecond*500),
+		z.WithAntiEntropy(time.Millisecond*100),
 		z.WithChordBits(uint(bitNum)),
 		z.WithStabilizeInterval(time.Millisecond*500),
 		z.WithFixFingersInterval(time.Millisecond*250))
@@ -32,7 +33,7 @@ func main() {
 	// read from command
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Println("Waiting for input...")
+		fmt.Printf("> ")
 		paramsS, err := reader.ReadString('\n')
 		paramsS = strings.TrimRight(paramsS, "\n")
 		if err != nil {

@@ -537,7 +537,7 @@ func Test_Network_Transfer_Epfer_complex(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 	require.Equal(t, node1.GetChain().Hash(), node2.GetChain().Hash())
 	require.Equal(t, node2.GetChain().Hash(), node3.GetChain().Hash())
 	require.Equal(t, 7, node1.GetChain().Len())
@@ -626,7 +626,7 @@ func Test_Network_Transfer_Epfer_complex_fivenodes(t *testing.T) {
 		require.NoError(t, err)
 	}()
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(10 * time.Second)
 	require.Equal(t, node1.GetChain().Hash(), node2.GetChain().Hash())
 	require.Equal(t, node2.GetChain().Hash(), node3.GetChain().Hash())
 	require.Equal(t, node3.GetChain().Hash(), node4.GetChain().Hash())

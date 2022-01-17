@@ -161,7 +161,7 @@ func (w *Wallet) TransferEpfer(dest account.Address, epfer int) error {
 	txn := transaction.NewTransaction(w.account.GetNonce(), epfer, *w.GetAccount().GetAddr(), dest)
 	// submit
 	handle := w.SubmitTxn(txn)
-	time.Sleep(10000 * time.Second)
+	time.Sleep(1 * time.Second)
 	// verify for a time
 	begin := time.Now()
 	err = w.VerifyTransaction(handle)

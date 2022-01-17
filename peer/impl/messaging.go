@@ -133,7 +133,7 @@ func (m *Messager) listenDaemon() {
 		// 	1.1 if yes, use `msgRegistry` to execute the callback associated with the message
 		//  1.2 if no, update the `RelayedBy` field of the message
 		if pack.Header.Destination == m.sock.GetAddress() {
-			fmt.Printf("I receive a msg from %s\n", pack.Header.Source)
+			// fmt.Printf("I receive a msg from %s\n", pack.Header.Source)
 			m.Trace().Str("addr", pack.Header.Destination).Msg("addr matched between peer and sender")
 			if err := m.msgRegistry.ProcessPacket(pack); err != nil {
 				var sendErr *SenderCallbackError
@@ -206,7 +206,7 @@ func (m *Messager) Unicast(dest string, msg transport.Message) error {
 
 	nextDest, err := m.send(pkt)
 	if err != nil {
-		err = fmt.Errorf("Unicast error: %w", err)
+		err = fmt.Errorf("Unicast error: %w, msg=%s", err, msg.String())
 		m.Err(err).Send()
 	}
 	m.Debug().Str("dest", dest).Str("nextDest", nextDest).Str("msg", msg.String()).Str("pkt", pkt.String()).Msg("unicast packet sended")
