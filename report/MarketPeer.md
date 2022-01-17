@@ -1,18 +1,14 @@
 # MarketPeer: A P2P Digital Market Platform
 
-
-
-
-
-
-
 ## Introduction
 
+Nowadays, e-commerce has become an indispensible part of our lives. Despite the convenience of these centralized platforms, they have several drawbacks. First of all, sellers and buyers each need to pay fees for the platform. Secondly, although maintained and secured by world's best engineers, these platforms are still under the risk of malicious attacks. We propose to establish a peer-to-peer online shopping platform, where the trades directly happen between buyers and sellers. Smart contract can make the transaction independently and automatically without the need of third-party organizations. In this "MarketPeer" platform, peers not only get rid of platform fees but also obtain better security.
 
 
 
+## Blockchain Background
 
-
+Blockchain is first proposed in Bitcoin whitpaper, which serves as an immutable and decentralized storage system especially for e-commerce. As its name indicates, Blockchain is a chain of blocks. Under the context of e-commerce system, each block could store multiple transaction information and together linking a linear history of transactions. To protect from malicious peers, Proof-of-Work(PoW) mechanisims and longest chain principles are applied, such that as long as the majority of the peers are "good", the storage's validty is preserved. By composing these key ingredients, Blockchain-based system could eliminate the requirment of any centralized and "trustworthy" third-parties. Besides, it even shows more appealing properties in security concerns. Different from Bitcoin, the Ethereum blockchain generalize the blockchain as a state machine. Each transaction can be seen as a state transition. This way, the Ethereum explicitly store the state in each block and allow fine-grained manipulation of the world state represented by the blockchain.
 
 ## Smart Contract Background
 
@@ -22,8 +18,6 @@ to implement kind of “minimum viable smart contract” as a simplified version
 - **Contract Code**: Ethereum uses **Solidity**, an object-oriented, high-level language for implementing smart contracts. To fit the scope of our project, we define a the minimum set of primitives for contract code. 
 - **Code Execution**: Ethereum compile the contract code and execute the bytecode in the **Ethereum Virtual Machine** (EVM). The environment is either isolated from the network and file system. We choose to implement interpreted execution, which transforms the AST to blockchain transaction.
 - **Core Features**: Since the primitive is blockchain transaction, the smart contract can fulfill the core features including immutability and global distributability.
-
-
 
 
 
