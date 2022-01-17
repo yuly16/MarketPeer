@@ -266,36 +266,56 @@ func (b *Block) String() string {
 		}
 	}
 
+	chopToLines := func(s string, maxlen int) []string {
+		ptr := 0
+		ret := []string{}
+		for ptr+maxlen <= len(s) {
+			ret = append(ret, s[ptr:ptr+maxlen])
+			ptr += maxlen
+		}
+		ret = append(ret, s[ptr:len(s)])
+		return ret
+	}
+	rows := []string{}
 	row1 := fmt.Sprintf("%s| %s", padOrCrop("prev", 6), b.Header.ParentHash)
+	rows = append(rows, row1)
+
 	row2 := fmt.Sprintf("%s| %d", padOrCrop("idx", 6), b.Header.Number)
+	rows = append(rows, row2)
 
 	row3 := fmt.Sprintf("%s| %s", padOrCrop("time", 6), time.UnixMilli(b.Header.Timestamp))
-	row4 := fmt.Sprintf("%s| %s", padOrCrop("state", 6), b.State)
-	row5 := fmt.Sprintf("%s| %s", padOrCrop("txns", 6), b.Transactions)
-	row6 := fmt.Sprintf("%s| %s", padOrCrop("recps", 6), b.Receipts)
-	row7 := fmt.Sprintf("%s| %d", padOrCrop("nonce", 6), b.Header.Nonce)
-	row8 := fmt.Sprintf("%s| %d", padOrCrop("diffi", 6), b.Header.Difficulty)
+	rows = append(rows, row3)
 
-	maxLen := max(row1, row2, row3, row4, row5, row6, row7, row8)
-	row1 = padOrCrop(row1, maxLen)
-	row2 = padOrCrop(row2, maxLen)
-	row3 = padOrCrop(row3, maxLen)
-	row4 = padOrCrop(row4, maxLen)
-	row5 = padOrCrop(row5, maxLen)
-	row6 = padOrCrop(row6, maxLen)
-	row7 = padOrCrop(row7, maxLen)
-	row8 = padOrCrop(row8, maxLen)
+	stateLines := chopToLines(fmt.Sprintf("%s", b.State), 70)
+	row4 := fmt.Sprintf("%s| %s", padOrCrop("state", 6), stateLines[0])
+	rows = append(rows, row4)
+	for i := 1; i < len(stateLines); i++ {
+		rows = append(rows, fmt.Sprintf("%s| %s", padOrCrop(" ", 6), stateLines[i]))
+
+	}
+	row5 := fmt.Sprintf("%s| %s", padOrCrop("txns", 6), b.Transactions)
+	rows = append(rows, row5)
+
+	row6 := fmt.Sprintf("%s| %s", padOrCrop("recps", 6), b.Receipts)
+	rows = append(rows, row6)
+
+	row7 := fmt.Sprintf("%s| %d", padOrCrop("nonce", 6), b.Header.Nonce)
+	rows = append(rows, row7)
+
+	row8 := fmt.Sprintf("%s| %d", padOrCrop("diffi", 6), b.Header.Difficulty)
+	rows = append(rows, row8)
+
+	maxLen := max(rows...)
+	paddedRows := make([]string, 0, len(rows))
+	for _, row := range rows {
+		paddedRows = append(paddedRows, padOrCrop(row, maxLen))
+	}
 
 	ret := ""
 	ret += fmt.Sprintf("\n┌%s┐\n", strings.Repeat("─", maxLen+2))
-	ret += fmt.Sprintf("|%s  |\n", row1)
-	ret += fmt.Sprintf("|%s  |\n", row2)
-	ret += fmt.Sprintf("|%s  |\n", row3)
-	ret += fmt.Sprintf("|%s  |\n", row4)
-	ret += fmt.Sprintf("|%s  |\n", row5)
-	ret += fmt.Sprintf("|%s  |\n", row6)
-	ret += fmt.Sprintf("|%s  |\n", row7)
-	ret += fmt.Sprintf("|%s  |\n", row8)
+	for _, row := range paddedRows {
+		ret += fmt.Sprintf("|%s  |\n", row)
+	}
 
 	ret += fmt.Sprintf("└%s┘\n", strings.Repeat("─", maxLen+2))
 	return ret

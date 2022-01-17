@@ -1,0 +1,28 @@
+{
+  "nodes": [
+    {
+      "addr": "127.0.0.1:51100",
+      "balance": 100,
+      "storage": {
+        "apple": 100
+      },
+      "privateKey": "dd39213a68ce0ea534bc8f3926120b062976e302d34ca40a376b20def857f9e1"
+    },
+    {
+      "addr": "127.0.0.1:52200",
+      "balance": 200,
+      "storage": {
+        "orange": 200
+      },
+      "privateKey": "ae0e81da417d35187cc92a38fd172da49cfcc63c194386be5131304179969584"
+    },
+    {
+      "addr": "127.0.0.1:53300",
+      "balance": 300,
+      "storage": {
+        "orange": 300
+      },
+      "privateKey": "a59d02ffb17133f9e90c98a1e3620356a8ee00e3f9d5c47243bf738bdb92179a"
+    }
+  ]
+}
