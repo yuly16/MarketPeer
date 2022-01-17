@@ -1,4 +1,4 @@
 ASSUME seller.balance > 50
-IF buyer.balance > 10 THEN
- 	buyer.transfer(5)
-	seller.send("apple", 5)
+IF buyer.balance > 60 THEN
+ 	buyer.transfer(50)
+	seller.send("orange", 100)

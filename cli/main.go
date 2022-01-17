@@ -8,7 +8,9 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"go.dedis.ch/cs438/blockchain/account"
 	"go.dedis.ch/cs438/blockchain/block"
+	"go.dedis.ch/cs438/blockchain/miner"
 	"go.dedis.ch/cs438/blockchain/storage"
+	"go.dedis.ch/cs438/contract/impl"
 	"go.dedis.ch/cs438/client/client"
 	z "go.dedis.ch/cs438/internal/testing"
 	"go.dedis.ch/cs438/registry/standard"
@@ -217,7 +219,10 @@ func main() {
 		}
 		return nil
 	}
-
+	// format: contract account
+	accept_contract_validate := func(input string) error {
+		return nil
+	}
 	transfer_validate := func(input string) error {
 		fmt.Println("Here is your input command", 1+1)
 		return nil
@@ -230,11 +235,18 @@ func main() {
 		fmt.Println("Here is your input command", 1+1)
 		return nil
 	}
+	ensure_validate := func(input string) error {
+		result := strings.Split(input, " ")
+		if result[0] != "y" && result[0] != "n" {
+			return fmt.Errorf("Please input y/n")
+		}
+		return nil
+	}
 	// Front-end CLI UI
 	for {
 		cmd_prompt := promptui.Select{
 			Label: "Select your command:",
-			Items: []string{"View Products", "Input Product Information", "Transfer", "ShowAccount", "ShowChain", "Propose Smart Contract", "Exit"},
+			Items: []string{"View Products", "Input Product Information", "Transfer", "ShowAccount", "ShowChain", "Propose Smart Contract", "Accept Contract", "Exit"},
 		}
 
 		is_exit := false
@@ -269,7 +281,10 @@ func main() {
 			Label: "[Propose contract] input (contract name, acceptor address): ",
 			Validate: propose_contract_validate,
 		}
-
+		accept_contract_prompt := promptui.Prompt{
+			Label: "[Accept contract] input (format: address): ",
+			Validate: accept_contract_validate,
+		}
 		transfer_prompt := promptui.Prompt{
 			Label:	"[Transfer] input transfer (format: Value To): ",
 			Validate: transfer_validate,
@@ -372,8 +387,57 @@ func main() {
 				fmt.Println("Fail to create contract: %v", err)
 				break
 			}
-			fmt.Println("Contract created at account: ", contract_addr)
+			fmt.Println("Contract account: ", contract_addr)
 
+		case "Accept Contract":
+			result, err := accept_contract_prompt.Run()
+			if err != nil {
+				fmt.Println("Invalid input form: %v", err)
+				break
+			}
+			
+			// call by cli params
+			params := strings.Split(result, " ")
+			contract_address := params[0]
+			contract_address_slice, _ := hex.DecodeString(contract_address)
+			contract_addr_8b := [8]byte{}
+			copy(contract_addr_8b[:], contract_address_slice)
+
+			// need to ensure the accept again
+			// first retrieve & see contract content
+			world_state, _, _ := clientNode.BlockChainFullNode.GetChain().LatestWorldState()
+			contract_state, err := miner.RetrieveState(contract_address, world_state)
+			if err != nil {
+				fmt.Println("Fail to retrive target contract: ", err)
+				break
+			}
+			var contract_inst impl.Contract
+			contract_bytecode := []byte(contract_state.Code)
+			json.Unmarshal(contract_bytecode, &contract_inst)
+			
+			fmt.Println("Contract content as followed: ")
+			fmt.Println(contract_inst.String())
+			ensure_prompt := promptui.Prompt{
+				Label:	"[Notice] Make sure to accept the contract (y/n)?",
+				Validate: ensure_validate,
+			}
+			result_ensure, err := ensure_prompt.Run()
+			if err != nil {
+				fmt.Println("Invalid input form: ", err)
+				break
+			}
+			if result_ensure == "n" {
+				fmt.Println("Not accept the contract.")
+				break
+			} else {
+				fmt.Println("Contract accepted. Submitted the transaction")
+			}
+
+			err = clientNode.BlockChainFullNode.Wallet.TriggerContract(account.Address{contract_addr_8b, contract_address})
+			if err != nil {
+				fmt.Println("Fail to accept contract: ", err)
+				break
+			}
 		case "Transfer":
 			info, _ := transfer_prompt.Run()
 			params := strings.Split(info, " ")

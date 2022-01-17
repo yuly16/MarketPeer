@@ -20,7 +20,7 @@ func (m *Miner) executeTxn(txn *transaction.SignedTransaction, worldState storag
 
 func (m *Miner) doExecuteTxn(txn *transaction.SignedTransaction, worldState storage.KV) error {
 	// TODO: contract case
-	if txn.Txn.To.IsContract() {
+	if txn.Txn.To.IsContract() && txn.Txn.Type != transaction.CREATE_CONTRACT {
 		return m.doContract(txn, worldState)
 	} else if txn.Txn.Type == transaction.CREATE_CONTRACT {
 		// create a transaction
