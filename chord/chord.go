@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/registry"
 	"go.dedis.ch/cs438/types"
@@ -179,15 +178,15 @@ func (c *Chord) FindSuccessorRemote(dest string, id uint) (string, error) {
 	if err := c.RequestSuccessorRemote(c.conf.Socket.GetAddress(), dest, id); err != nil {
 		return "", err
 	}
-	log.Debug().Msgf("FindSuccessorRemote: %d waits successorReply, send to %d, id = %d\n",
-		c.chordId, c.HashKey(dest), id)
+	//log.Debug().Msgf("FindSuccessorRemote: %d waits successorReply, send to %d, id = %d\n",
+	//	c.chordId, c.HashKey(dest), id)
 
 	// waiting for successor of id
 	timer := time.After(500 * time.Second)
 	select {
 	case findSuccMsg := <-findSuccCh:
-		log.Debug().Msgf("FindSuccessorRemote: %d receives successorReply from %d, id = %d\n",
-			c.chordId, c.HashKey(dest), id)
+		//log.Debug().Msgf("FindSuccessorRemote: %d receives successorReply from %d, id = %d\n",
+		//	c.chordId, c.HashKey(dest), id)
 		return findSuccMsg.Dest, nil
 	case <-timer:
 		return "", fmt.Errorf("FindSuccessorRemote: waiting for successor time out. ")

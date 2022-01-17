@@ -4,10 +4,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"strconv"
-
 	"github.com/ethereum/go-ethereum/crypto"
 	"go.dedis.ch/cs438/blockchain/account"
 	"go.dedis.ch/cs438/blockchain/block"
@@ -16,6 +12,9 @@ import (
 	z "go.dedis.ch/cs438/internal/testing"
 	"go.dedis.ch/cs438/registry/standard"
 	"go.dedis.ch/cs438/transport/udp"
+	"io/ioutil"
+	"os"
+	"strconv"
 
 	// "os"
 	"strings"
@@ -23,7 +22,6 @@ import (
 
 	"github.com/manifoldco/promptui"
 )
-
 type nodeConfig struct {
 	Addr       string
 	Balance    int
@@ -35,72 +33,6 @@ type config struct {
 	Nodes []nodeConfig
 }
 
-// based on init accounts info, generate the genesis block
-func generateGenesisBlock(kvFactory storage.KVFactory, accounts ...*account.Account) *block.Block {
-	bb := block.NewBlockBuilder(kvFactory).
-		SetParentHash(block.DUMMY_PARENT_HASH).
-		SetNonce(0).
-		SetNumber(0).
-		SetDifficulty(2).
-		SetBeneficiary(*account.NewAddress([8]byte{}))
-	for _, acc := range accounts {
-		bb.SetAddrState(acc.GetAddr(), acc.GetState())
-	}
-	b := bb.Build()
-	return b
-}
-
-func initBlockchain(c *config) *block.Block {
-
-	accounts := make([]*account.Account, 0)
-	for _, node := range c.Nodes {
-		pri, err := crypto.HexToECDSA(node.PrivateKey)
-		if err != nil {
-			panic(err)
-		}
-		pub := &pri.PublicKey
-		acb := account.NewAccountBuilder(crypto.FromECDSAPub(pub), storage.CreateSimpleKV).
-			WithBalance(uint(node.Balance))
-		for k, v := range node.Storage {
-			acb.WithKV(k, v)
-		}
-		ac := acb.Build()
-		accounts = append(accounts, ac)
-
-	}
-	return generateGenesisBlock(storage.CreateSimpleKV, accounts...)
-}
-
-func nodeConf(c *config, addr string) *nodeConfig {
-	for _, node := range c.Nodes {
-		if node.Addr == addr {
-			return &node
-		}
-	}
-	return nil
-}
-
-func initPeers(c *config, me string) []string {
-	ret := make([]string, 0)
-	for _, nodeC := range c.Nodes {
-		if me == nodeC.Addr {
-			continue
-		}
-		ret = append(ret, nodeC.Addr)
-	}
-	return ret
-}
-
-type nodeConfig struct {
-	Addr       string
-	Balance    int
-	Storage    map[string]interface{}
-	PrivateKey string
-}
-
-type config struct {
-	Nodes []nodeConfig
-}
 
 // based on init accounts info, generate the genesis block
 func generateGenesisBlock(kvFactory storage.KVFactory, accounts ...*account.Account) *block.Block {
@@ -159,21 +91,6 @@ func initPeers(c *config, me string) []string {
 }
 
 func main() {
-	data, err := ioutil.ReadFile("config.json")
-	if err != nil {
-		panic(err)
-	}
-	c := &config{}
-	if err := json.Unmarshal(data, c); err != nil {
-		panic(err)
-	}
-	genesis := initBlockchain(c)
-	argsWithoutProg := os.Args[1:]
-	addr := argsWithoutProg[0]
-	nodeC := nodeConf(c, addr)
-	if nodeC == nil {
-		fmt.Printf("addr=%s not in config.json, exit\n", addr)
-	}
 	// initialize
 	data, err := ioutil.ReadFile("config.json")
 	if err != nil {
@@ -305,8 +222,14 @@ func main() {
 	}
 	inputproduct_validate := func(input string) error {
 		params := strings.Split(input, " ")
-		if len(params) == 2 {
-			return nil
+		if len(params) == 3 {
+			_, err := strconv.Atoi(params[2])
+			if err != nil {
+				return fmt.Errorf("error")
+			} else {
+				return nil
+			}
+
 		} else {
 			return fmt.Errorf("error")
 		}
@@ -343,27 +266,27 @@ func main() {
 		}
 
 		addpeer_prompt := promptui.Prompt{
-			Label:    "[Add peer] input a valid IP address: ",
+			Label:	"[Add peer] input a valid IP address: ",
 			Validate: addpeer_validate,
 		}
 		initchord_prompt := promptui.Prompt{
-			Label:    "[Init Chord] input a valid IP address: ",
+			Label:	"[Init Chord] input a valid IP address: ",
 			Validate: initchord_validate,
 		}
 		joinchord_prompt := promptui.Prompt{
-			Label:    "[Join Chord] input a valid IP address: ",
+			Label:	"[Join Chord] input a valid IP address: ",
 			Validate: joinchord_validate,
 		}
 		inputproduct_prompt := promptui.Prompt{
-			Label:    "[Input Product] input product information: ",
+			Label:	"[Input Product] input product information: ",
 			Validate: inputproduct_validate,
 		}
 		viewproduct_prompt := promptui.Prompt{
-			Label:    "[View Product] input product name: ",
+			Label:	"[View Product] input product name: ",
 			Validate: viewproduct_validate,
 		}
 		transfer_prompt := promptui.Prompt{
-			Label:    "[Transfer] input transfer (format: Value To): ",
+			Label:	"[Transfer] input transfer (format: Value To): ",
 			Validate: transfer_validate,
 		}
 		switch cmd {
@@ -401,21 +324,25 @@ func main() {
 				return
 			} else {
 				infos := strings.Split(info, " ")
-				if len(infos) != 2 {
-					fmt.Println("Wrong format.")
+				name := infos[0]
+				address := infos[1]
+				amount, _ := strconv.Atoi(infos[2])
+				product := client.Product{
+					Name: name,
+					Owner: address,
+					Amount: amount,
+				}
+				err := clientNode.StoreProductString(name, product)
+				if err != nil {
+					fmt.Println("store product error")
+					fmt.Println(err)
+					return
+				}
+				if err := clientNode.BlockChainFullNode.UploadProduct(name, amount); err != nil {
+					fmt.Println("upload product fail: ", err)
 				} else {
-					name := infos[0]
-					address := infos[1]
-					product := client.Product{
-						Name:  name,
-						Owner: address,
-					}
-					err := clientNode.StoreProductString(name, product)
-					if err != nil {
-						fmt.Println("store product error")
-						fmt.Println(err)
-						return
-					}
+					fmt.Println("upload product success, new account state:")
+					fmt.Println(clientNode.BlockChainFullNode.ShowAccount().String())
 				}
 			}
 		case "View Products":
@@ -426,7 +353,7 @@ func main() {
 			} else {
 				product, exist := clientNode.ReadProductString(info)
 				if exist {
-					fmt.Printf("ProductInfo: name: %s, address: %s\n", product.Name, product.Owner)
+					fmt.Printf("ProductInfo: name: %s, address: %s, amount: %d\n", product.Name, product.Owner, product.Amount)
 				} else {
 					fmt.Println("the product doesn't exist in chord. ")
 				}
