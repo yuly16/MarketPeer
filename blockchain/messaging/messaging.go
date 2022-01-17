@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"fmt"
+
 	"github.com/rs/zerolog"
 	"go.dedis.ch/cs438/logging"
 	"go.dedis.ch/cs438/peer"
@@ -35,7 +36,7 @@ type RegistryMessager struct {
 func NewRegistryMessager(addr string, messaging peer.Messager, registry registry.Registry) *RegistryMessager {
 	m := &RegistryMessager{}
 	m.logger = logging.RootLogger.With().Str("Messaging", fmt.Sprintf("%s", addr)).Logger()
-	m.logger.Info().Msg("created")
+	m.logger.Info().Msg("created RegistryMessager")
 	m.messager = messaging
 	m.msgRegistry = registry
 	return m

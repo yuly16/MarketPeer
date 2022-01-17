@@ -3,23 +3,19 @@ package chord
 import (
 	"crypto/sha1"
 	"fmt"
+	"math/big"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"go.dedis.ch/cs438/peer"
 	"go.dedis.ch/cs438/registry"
 	"go.dedis.ch/cs438/types"
-	"math/big"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
-
-
-
-
 func NewChord(messager peer.Messaging, conf peer.Configuration) *Chord {
-	zerolog.SetGlobalLevel(zerolog.ErrorLevel)
 
 	chordInstance := Chord{}
 	chordInstance.conf = conf
@@ -54,29 +50,28 @@ func NewChord(messager peer.Messaging, conf peer.Configuration) *Chord {
 	return &chordInstance
 }
 
-
 //func (c *ChordStorage)
 type Chord struct {
 	peer.Messaging
 	zerolog.Logger
 
-	conf                peer.Configuration
-	msgRegistry         registry.Registry
+	conf        peer.Configuration
+	msgRegistry registry.Registry
 
-	chordId     		uint
-	successor   		MutexString
-	predecessor 		MutexString
+	chordId     uint
+	successor   MutexString
+	predecessor MutexString
 
-	chMutex             sync.Mutex
-	findSuccessorCh     map[uint]chan types.ChordFindSuccessorReplyMessage
-	askPredecessorCh    chan types.ChordReplyPredecessorMessage
-	acquireKVCh     map[uint]chan types.ChordGiveKVMessage
+	chMutex          sync.Mutex
+	findSuccessorCh  map[uint]chan types.ChordFindSuccessorReplyMessage
+	askPredecessorCh chan types.ChordReplyPredecessorMessage
+	acquireKVCh      map[uint]chan types.ChordGiveKVMessage
 
-	fingerTable         *FingerTable
+	fingerTable *FingerTable
 
-	blockStore          ChordStorage
+	blockStore ChordStorage
 
-	stat                int32
+	stat int32
 }
 
 //The identifier length m must
@@ -95,7 +90,7 @@ func (c *Chord) HashKey(key string) uint {
 }
 
 func (c *Chord) closestPrecedingNode(id uint) (string, error) {
-	for i := int(c.conf.ChordBits - 1); i >= 0; i -- {
+	for i := int(c.conf.ChordBits - 1); i >= 0; i-- {
 		nodeAddr, err := c.fingerTable.load(i)
 		if err != nil {
 			return "", err
@@ -154,7 +149,7 @@ func (c *Chord) findSuccessor(id uint) (string, error) {
 // RequestSuccessorRemote tells dest to find the Successor of id and send to source
 func (c *Chord) RequestSuccessorRemote(source string, dest string, id uint) error {
 	msg, err := c.msgRegistry.MarshalMessage(
-		types.ChordFindSuccessorMessage{Source: source, ID:id})
+		types.ChordFindSuccessorMessage{Source: source, ID: id})
 	if err != nil {
 		return err
 	}
@@ -190,7 +185,7 @@ func (c *Chord) FindSuccessorRemote(dest string, id uint) (string, error) {
 	// waiting for successor of id
 	timer := time.After(500 * time.Second)
 	select {
-	case findSuccMsg := <- findSuccCh:
+	case findSuccMsg := <-findSuccCh:
 		log.Debug().Msgf("FindSuccessorRemote: %d receives successorReply from %d, id = %d\n",
 			c.chordId, c.HashKey(dest), id)
 		return findSuccMsg.Dest, nil
@@ -237,7 +232,7 @@ func (c *Chord) Stabilize() error {
 	// waiting for the response of successor
 	timer := time.After(3 * time.Second)
 	select {
-	case ReplyPredecessorMsg := <- c.askPredecessorCh:
+	case ReplyPredecessorMsg := <-c.askPredecessorCh:
 		if ReplyPredecessorMsg.Predecessor != "" &&
 			between(c.HashKey(ReplyPredecessorMsg.Predecessor), c.chordId, c.HashKey(successor)) {
 			c.successor.write(ReplyPredecessorMsg.Predecessor)
@@ -263,7 +258,7 @@ func (c *Chord) Stabilize() error {
 }
 
 func (c *Chord) FixFinger() error {
-	fingerTableItem, err := c.findSuccessor((c.chordId + 1 << c.fingerTable.fixPointer) % (1 << c.conf.ChordBits))
+	fingerTableItem, err := c.findSuccessor((c.chordId + 1<<c.fingerTable.fixPointer) % (1 << c.conf.ChordBits))
 	if err != nil {
 		return err
 	}
@@ -281,7 +276,6 @@ func (c *Chord) Lookup(key uint) (string, error) {
 	destination, err := c.findSuccessor(key)
 	return destination, err
 }
-
 
 func (c *Chord) Get(key uint) (interface{}, bool, error) {
 	dest, err := c.findSuccessor(key)
@@ -306,7 +300,6 @@ func (c *Chord) Get(key uint) (interface{}, bool, error) {
 		}
 		c.chMutex.Unlock()
 
-
 		// send packet to the owner
 		kvMsg, err := c.msgRegistry.MarshalMessage(
 			types.ChordAskKVMessage{Key: key})
@@ -320,7 +313,7 @@ func (c *Chord) Get(key uint) (interface{}, bool, error) {
 		// waiting for successor of id
 		timer := time.After(20 * time.Second)
 		select {
-		case kvReplyMsg := <- kvCh:
+		case kvReplyMsg := <-kvCh:
 			return kvReplyMsg.Value, kvReplyMsg.Exist, nil
 		case <-timer:
 			return nil, false, fmt.Errorf("FindSuccessorRemote: waiting for successor time out. ")
@@ -349,7 +342,7 @@ func (c *Chord) Put(key uint, data interface{}) error {
 	return nil
 }
 
-func (c *Chord) GetChordId() uint{
+func (c *Chord) GetChordId() uint {
 	return c.chordId
 }
 
@@ -378,14 +371,14 @@ func (c *Chord) GetFingerTable() []uint {
 // just for test
 func (c *Chord) OutputStorage() map[uint]interface{} {
 	c.blockStore.Lock()
-	data :=  c.blockStore.data
+	data := c.blockStore.data
 	c.blockStore.Unlock()
 	return data
 }
 
 func (c *Chord) transferKey(dest string, begin uint, end uint) error {
 	data := c.blockStore.findBetweenRightInclude(begin, end)
-	transferMsg,err := c.msgRegistry.MarshalMessage(
+	transferMsg, err := c.msgRegistry.MarshalMessage(
 		types.ChordTransferKeyMessage{Data: data})
 	if err != nil {
 		return err
