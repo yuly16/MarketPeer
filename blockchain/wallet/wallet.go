@@ -170,7 +170,7 @@ func (w *Wallet) TransferEpfer(dest account.Address, epfer int) error {
 	for err != nil {
 		err = w.VerifyTransaction(handle)
 		time.Sleep(500 * time.Millisecond)
-		if time.Since(begin) > 3*time.Second {
+		if time.Since(begin) > 10*time.Second {
 			return fmt.Errorf("transaction failed")
 		}
 	}

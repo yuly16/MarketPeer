@@ -1,6 +1,7 @@
 package miner
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -94,7 +95,7 @@ func (m *Miner) verifyAndExecuteTxnd() {
 			continue
 		}
 		m.logger.Info().Msgf("PoW done, block: %s", newBlock.String())
-		msg := types.BlockMessage{*newBlock}
+		msg := types.BlockMessage{m.addr, *newBlock}
 		if err := m.messaging.Broadcast(msg); err != nil {
 			m.logger.Err(err).Send()
 			continue
@@ -111,7 +112,9 @@ func (m *Miner) verifyAndExecuteTxnd() {
 // Q: what if a stale block? A: handled by TryAppend and Append
 func (m *Miner) verifyBlockd() {
 	for !m.isKilled() {
-		newBlock := <-m.blockCh
+		newBlockMsg := <-m.blockCh
+		newBlock := &newBlockMsg.Block
+		from := newBlockMsg.From
 		m.logger.Debug().Msgf("begin verify the block: %s", newBlock.String())
 		// first check if it is a valid PoW block
 		// validate POW
@@ -124,6 +127,26 @@ func (m *Miner) verifyBlockd() {
 		// then try to append, the append will tell us if it can append
 		// FIXME: if the block is too new, then we need to sync with this miner!
 		parent, err := m.chain.TryAppend(newBlock)
+		if err != nil && errors.Is(err, block.ErrBlockTooNew) {
+			// ask for blocks
+			blocks, err := m.askForMissingBlocks(from, newBlock.Header.Number-1)
+			if err != nil {
+				m.logger.Err(err).Send()
+				continue
+			}
+			// all blocks are asked, then we overwrite our chain
+			if err := m.chain.OverWrite(blocks); err != nil {
+				m.logger.Err(err).Send()
+				continue
+			}
+			if err := m.chain.Append(newBlock); err != nil {
+				m.logger.Err(err).Send()
+				continue
+			}
+			m.logger.Info().Msgf("miner catch up block(%d) success!", newBlock.Header.Number)
+			continue
+		}
+
 		if err != nil {
 			m.logger.Err(err).Send()
 			continue

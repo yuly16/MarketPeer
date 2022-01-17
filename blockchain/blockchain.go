@@ -29,6 +29,7 @@ type FullNodeConf struct {
 	Account    *account.Account
 
 	BlockTransactions int // how many transactions in a block
+	Attacker bool
 }
 
 // FullNode is a Wallet as well as a Miner
@@ -46,7 +47,8 @@ type FullNode struct {
 func NewFullNode(conf *FullNodeConf) *FullNode {
 	m := miner.NewMiner(miner.MinerConf{
 		Addr: conf.Addr, Messaging: conf.Messaging,
-		Bootstrap: conf.Bootstrap, KVFactory: conf.KVFactory, AccountAddr: conf.Account.GetAddr()})
+		Bootstrap: conf.Bootstrap, KVFactory: conf.KVFactory, AccountAddr: conf.Account.GetAddr(),
+		Attacker: conf.Attacker})
 
 	w := wallet.NewWallet(wallet.WalletConf{
 		Addr: conf.Addr, Messaging: conf.Messaging,
