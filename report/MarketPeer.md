@@ -98,7 +98,6 @@ The miners are the key components of the blockchain network, they are responsibl
 
 As we adopt ethereum-alike blockchain network. The biggest difference from Bitcoin block is that it also contains the `WorldState`, which is a mapping between `AccountAddress` and `AccountState`. The `AccountState` is also a KV representing the digial assets. Further, we make serveral simplified assumptions: (1) the difficulty of the network is fixed, not dynamically adapted; (2) use hash map rather than Merkle tree as the KV interface. To faciliate above functionalites, we also define a new message: `BlockMessage` which is used to broadcast the block to other miners.
 
-<<<<<<< HEAD
 ## Chord Architecture & Functionalities
 
 ### Overview
@@ -196,7 +195,7 @@ We explain the process of contract execution with the figure below. Miners are o
 3. `Accept Contract`: Once the seller is satisfied with the contract, it can trigger the contract execution by submitting a `EXEC_CONTRACT` transaction.
 4. `Execute Contract`: Supported with `SmartContract` APIs, any miner can execute the contract code then submit the state change. Since the execution is supported by blockchain transaction, features like **immutability** and **global distributability** are satisfied.
 
->>>>>>> f8d46e83a5592e969fb528df5743adb07e820ea3
+
 
 
 ## Fine-grained team contribution
