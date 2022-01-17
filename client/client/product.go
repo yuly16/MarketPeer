@@ -10,3 +10,7 @@ type User struct {
 	Name string    // name of the user
 	Address string // ip address of the user
 }
+
+type Account struct {
+	AccountAddress string
+}
