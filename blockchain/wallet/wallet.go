@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"crypto/rand"
 	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/hex"
@@ -221,8 +222,67 @@ func (w *Wallet) ShowAccount() AccountInfo {
 	return AccountInfo{Addr: w.account.GetAddr().String(), Balance: w.account.GetBalance(), Storage: s}
 }
 
-func (w *Wallet) TriggerContract(dest account.Account, data []byte) {
+// Trigger contract sends empty transaction to the contract account, validated by account address
+func (w *Wallet) TriggerContract(dest account.Address) error {
+	err := w.SyncAccount()
+	for err != nil {
+		w.logger.Warn().Msgf("trigger contract sync account fail: %v", err)
+		err = w.SyncAccount()
+	}
 
+	// create the transaction (value not care)
+	txn := transaction.NewTransaction(w.account.GetNonce(), 0, *w.GetAccount().GetAddr(), dest)
+	// submit
+	handle := w.SubmitTxn(txn)
+	time.Sleep(1 * time.Second)
+	// verify for a time
+	begin := time.Now()
+	err = w.VerifyTransaction(handle)
+	for err != nil {
+		err = w.VerifyTransaction(handle)
+		time.Sleep(500 * time.Millisecond)
+		if time.Since(begin) > 3*time.Second {
+			return fmt.Errorf("transaction failed")
+		}
+	}
+	return nil
+}
+
+// Buyer propose a contract by submitting a special transaction
+// transaction.Type = transaction.CREATE_CONTRACT
+func (w *Wallet) ProposeContract() (string, error) {
+	err := w.SyncAccount()
+	for err != nil {
+		w.logger.Warn().Msgf("trigger contract sync account fail: %v", err)
+		err = w.SyncAccount()
+	}
+
+	// create propose contract transaction (with random address)
+	bytesBegin := []byte{0, 0, 0, 0}
+	bytesEnd := make([]byte, 4)
+	_, err = rand.Read(bytesEnd)
+	if err != nil {
+		return "error", err
+	}
+	contract_address := append(bytesBegin, bytesEnd...)
+	contract_addr_8b := [8]byte{}
+	copy(contract_addr_8b[:], contract_address[len(contract_address)-8:])
+
+	txn := transaction.NewProposeContractTransaction(w.account.GetNonce(), 0, *w.GetAccount().GetAddr(), *account.NewAddress(contract_addr_8b))
+	// submit
+	handle := w.SubmitTxn(txn)
+	time.Sleep(1 * time.Second)
+	// verify for a time
+	begin := time.Now()
+	err = w.VerifyTransaction(handle)
+	for err != nil {
+		err = w.VerifyTransaction(handle)
+		time.Sleep(500 * time.Millisecond)
+		if time.Since(begin) > 3*time.Second {
+			return "error", fmt.Errorf("transaction failed")
+		}
+	}
+	return string(contract_address), nil
 }
 
 // wallet can submit a transaction

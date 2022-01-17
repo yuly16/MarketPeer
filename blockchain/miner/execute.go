@@ -1,7 +1,6 @@
 package miner
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 
@@ -112,6 +111,12 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 		return fmt.Errorf("unmarshal contract byte code error: %w", unmarshal_err)
 	}
 
+	// we need to first check whether or not triggered by acceptor account
+	// otherwise, the transaction will not be executed
+	if txn.Txn.From.String() != contract_inst.GetAcceptorAccount() {
+		return fmt.Errorf("contract not triggered by acceptor: %s", txn.Txn.From.String())
+	}
+
 	// 2. check conditions and collect actions in contract
 	valid, validate_err := contract_inst.ValidateAssumptions(worldState)
 	if validate_err != nil {
@@ -187,7 +192,6 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 				if !ok {
 					return fmt.Errorf("cannot cast to float: %T", amount_hold)
 				}
-				fmt.Println("debug: ", amount_hold_float, send_amount)
 				if amount_hold_float < send_amount {
 					return fmt.Errorf("do not have enough product: %s", send_product)
 				}
@@ -215,26 +219,18 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 		return fmt.Errorf("cannot put acceptor addr and state to KV: %w", err_put_acceptor)
 	}
 	proposer_state.Nonce += 1
-	fmt.Println("Completed")
 
 	return nil
 }
 
 func (m *Miner) createContract(txn *transaction.SignedTransaction, worldState storage.KV) error {
-	bytesBegin := []byte{0, 0, 0, 0}
-	bytesEnd := make([]byte, 4)
-	_, err := rand.Read(bytesEnd)
-	if err != nil {
-		return err
-	}
-	address := append(bytesBegin, bytesEnd...)
 	state := account.State{
 		Nonce:       0,
 		Balance:     0,
 		StorageRoot: m.kvFactory(),
 		Code:        txn.Txn.Code,
 	}
-	err = worldState.Put(string(address), &state)
+	err := worldState.Put(txn.Txn.To.String(), &state)
 	if err != nil {
 		return fmt.Errorf("put contract error: %w", err)
 	}

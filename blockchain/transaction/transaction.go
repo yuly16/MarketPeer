@@ -29,6 +29,19 @@ func NewTransaction(nonce int, value int, from account.Address, to account.Addre
 	return txn
 }
 
+func NewProposeContractTransaction(nonce int, value int, from account.Address, to account.Address) Transaction {
+	txn := Transaction{}
+	txn.Nonce = nonce
+	txn.Value = value
+	txn.Type = CREATE_CONTRACT
+	txn.From = from
+	txn.To = to
+	txn.V = "abc"
+	txn.S = "def"
+	txn.R = "ghi"
+	return txn
+}
+
 func hash(data interface{}) []byte {
 	h := sha256.New()
 	bytes, err := json.Marshal(data)
