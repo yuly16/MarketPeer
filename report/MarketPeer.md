@@ -1,4 +1,29 @@
-# MarketPeer
+# MarketPeer: A P2P Digital Market Platform
+
+
+
+
+
+
+
+## Introduction
+
+
+
+
+
+
+
+## Smart Contract Background
+
+Currently, **Ethereum** is one of the most popular blockchains with smart contract functionality. We aim
+to implement kind of “minimum viable smart contract” as a simplified version of Ethereum. Generally speaking, we borrow the basic ideas but simplify them in some aspects:
+
+- **Contract Code**: Ethereum uses **Solidity**, an object-oriented, high-level language for implementing smart contracts. To fit the scope of our project, we define a the minimum set of primitives for contract code. 
+- **Code Execution**: Ethereum compile the contract code and execute the bytecode in the **Ethereum Virtual Machine** (EVM). The environment is either isolated from the network and file system. We choose to implement interpreted execution, which transforms the AST to blockchain transaction.
+- **Core Features**: Since the primitive is blockchain transaction, the smart contract can fulfill the core features including immutability and global distributability.
+
+
 
 
 
