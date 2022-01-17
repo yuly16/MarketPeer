@@ -128,11 +128,11 @@ func main() {
 		clientNode.AddPeers(nei)
 	}
 	clientNode.Start()
-	fmt.Printf("network addr=%s, account addr=%s\n", clientNode.BlockChainFullNode.GetAddr(),
-		clientNode.BlockChainFullNode.GetAccountAddr().String())
-	fmt.Printf("peers=%v\n", neis)
-	fmt.Println("initial block: ")
-	fmt.Println(clientNode.BlockChainFullNode.GetChain().String())
+	//fmt.Printf("network addr=%s, account addr=%s\n", clientNode.BlockChainFullNode.GetAddr(),
+	//	clientNode.BlockChainFullNode.GetAccountAddr().String())
+	//fmt.Printf("peers=%v\n", neis)
+	//fmt.Println("initial block: ")
+	//fmt.Println(clientNode.BlockChainFullNode.GetChain().String())
 	time.Sleep(time.Second * 2)
 
 	//reader := bufio.NewReader(os.Stdin)
@@ -253,7 +253,7 @@ func main() {
 	// Front-end CLI UI
 	for {
 		cmd_prompt := promptui.Select{
-			Label: "Select your command:",
+			Label: "Select your command",
 			Items: []string{"View Products", "Input Product Information", "Transfer", "ShowAccount", "ShowChain", "Exit"},
 		}
 
@@ -266,27 +266,27 @@ func main() {
 		}
 
 		addpeer_prompt := promptui.Prompt{
-			Label:	"[Add peer] input a valid IP address: ",
+			Label:	"[Add peer] input a valid IP address",
 			Validate: addpeer_validate,
 		}
 		initchord_prompt := promptui.Prompt{
-			Label:	"[Init Chord] input a valid IP address: ",
+			Label:	"[Init Chord] input a valid IP address",
 			Validate: initchord_validate,
 		}
 		joinchord_prompt := promptui.Prompt{
-			Label:	"[Join Chord] input a valid IP address: ",
+			Label:	"[Join Chord] input a valid IP address",
 			Validate: joinchord_validate,
 		}
 		inputproduct_prompt := promptui.Prompt{
-			Label:	"[Input Product] input product information: ",
+			Label:	"[Input Product] input product information",
 			Validate: inputproduct_validate,
 		}
 		viewproduct_prompt := promptui.Prompt{
-			Label:	"[View Product] input product name: ",
+			Label:	"[View Product] input product name",
 			Validate: viewproduct_validate,
 		}
 		transfer_prompt := promptui.Prompt{
-			Label:	"[Transfer] input transfer (format: Value To): ",
+			Label:	"[Transfer] input transfer (format: Value To)",
 			Validate: transfer_validate,
 		}
 		switch cmd {
