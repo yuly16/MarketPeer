@@ -415,7 +415,7 @@ func main() {
 			} else {
 				product, exist := clientNode.ReadProductString(info)
 				if exist {
-					fmt.Printf("ProductInfo: name: %s, address: %s, amount: %d\n", product.Name, product.Owner, product.Amount)
+					fmt.Printf("ProductInfo: name: %s, description: %s, amount: %d\n", product.Name, product.Owner, product.Amount)
 				} else {
 					fmt.Println("the product doesn't exist in chord. ")
 				}
