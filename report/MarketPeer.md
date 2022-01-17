@@ -20,7 +20,7 @@ to implement kind of “minimum viable smart contract” as a simplified version
 - **Core Features**: Since the primitive is blockchain transaction, the smart contract can fulfill the core features including immutability and global distributability.
 
 
-## Background of Chord
+## Chord Background
 
 Chord is a peer-to-peer distributed hash table. Compared with a traditional central storage system, data is distributed evenly in every node in Chord. It decreases the burden of the central server because all nodes in Chord share the responsibility to store data. Chord describes how a key-value pair is stored in the node, and how to find the storage location of a key-value pair.
 
