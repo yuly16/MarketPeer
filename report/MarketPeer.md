@@ -1,10 +1,6 @@
 # MarketPeer: A P2P Digital Market Platform
 
-
-
-
-
-
+Yifei Li, Liangyong Yu, Lin Yuan
 
 ## Introduction
 
@@ -199,7 +195,17 @@ Main contribution is highlighted with bold text.
 - - ​
 
 
+### Smart Contract Evaluation
 
+We evaluate the correctness of smart contract in a network of 3 nodes. Since we assume that each contract has only 2 parties: buyer and seller, extra nodes will not affect the correctness. Each node is full node and can execute the contract as miner.
+
+**Contract Code**: According to the code, buyer will buy 100 oranges with the price of 50. 
+
+![od](code.png)
+
+**BlockChain Result**: According to the figure below, the first block stores the transaction to create the contract account. The second block stores the transaction to execute the contract. After the execution, the seller's balance increases by 50 and buyer's balance decreases by 50. The buyer gets 100 oranges from the seller. The two actions are performed in the same transaction so the semantics of smart contract has been satisfied.
+
+![ontrac](contract.png)
 
 
 
