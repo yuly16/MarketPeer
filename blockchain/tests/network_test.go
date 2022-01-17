@@ -675,6 +675,22 @@ func Test_Network_Transfer_Epfer_complex_attacker_fivenodes(t *testing.T) {
 		return generateGenesisBlock(storage.CreateSimpleKV, acc1, acc2, acc3, acc4, acc5)
 	}
 
+	attackerFactory := func(acc *account.Account, pri *ecdsa.PrivateKey) *blockchain.FullNode {
+		sock, err := transp.CreateSocket("127.0.0.1:0")
+		require.NoError(t, err)
+		//crypto.
+		fullNode, _ := z.NewTestFullNode(t,
+			z.WithSocket(sock),
+			z.WithMessageRegistry(standard.NewRegistry()),
+			z.WithPrivateKey(pri),
+			z.WithAccount(acc),
+			z.WithAttacker(),
+			z.WithGenesisBlock(genesisFactory()),
+			z.WithAntiEntropy(100*time.Millisecond),
+		)
+		return fullNode
+	}
+
 	nodeFactory := func(acc *account.Account, pri *ecdsa.PrivateKey) *blockchain.FullNode {
 		sock, err := transp.CreateSocket("127.0.0.1:0")
 		require.NoError(t, err)
@@ -690,7 +706,7 @@ func Test_Network_Transfer_Epfer_complex_attacker_fivenodes(t *testing.T) {
 		return fullNode
 	}
 
-	node1 := nodeFactory(acc1, pri1)
+	node1 := attackerFactory(acc1, pri1)
 	node2 := nodeFactory(acc2, pri2)
 	node3 := nodeFactory(acc3, pri3)
 	node4 := nodeFactory(acc4, pri4)
@@ -710,12 +726,16 @@ func Test_Network_Transfer_Epfer_complex_attacker_fivenodes(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	go func() {
-		txn := transaction.NewTransaction(0, 5, *node2.GetAccountAddr(), *node1.GetAccountAddr())
+		txn := transaction.NewTransaction(0, 10, *node2.GetAccountAddr(), *node1.GetAccountAddr())
 		node1.SubmitTxn(txn)
-		err := node1.TransferEpfer(*node2.GetAccount().GetAddr(), 50)
-		require.NoError(t, err)
-		err = node1.TransferEpfer(*node2.GetAccount().GetAddr(), 50)
-		require.NoError(t, err)
+
+		txn1 := transaction.NewTransaction(1, 10, *node2.GetAccountAddr(), *node1.GetAccountAddr())
+		node1.SubmitTxn(txn1)
+
+		txn2 := transaction.NewTransaction(2, 10, *node2.GetAccountAddr(), *node1.GetAccountAddr())
+		node1.SubmitTxn(txn2)
+		txn3 := transaction.NewTransaction(3, 10, *node2.GetAccountAddr(), *node1.GetAccountAddr())
+		node1.SubmitTxn(txn3)
 	}()
 
 	go func() {
@@ -733,13 +753,14 @@ func Test_Network_Transfer_Epfer_complex_attacker_fivenodes(t *testing.T) {
 	}()
 
 	time.Sleep(10 * time.Second)
-	require.Equal(t, node1.GetChain().Hash(), node2.GetChain().Hash())
+	//require.Equal(t, node1.GetChain().Hash(), node2.GetChain().Hash())
 	require.Equal(t, node2.GetChain().Hash(), node3.GetChain().Hash())
 	require.Equal(t, node3.GetChain().Hash(), node4.GetChain().Hash())
 	require.Equal(t, node4.GetChain().Hash(), node5.GetChain().Hash())
 
-	require.Equal(t, 7, node1.GetChain().Len())
+	require.Equal(t, 5, node2.GetChain().Len())
 	fmt.Printf("node1 chain: \n%s", node1.GetChain())
+	fmt.Printf("node2 chain: \n%s", node2.GetChain())
 
 	go func() {
 		node1.SyncAccount()
@@ -751,7 +772,7 @@ func Test_Network_Transfer_Epfer_complex_attacker_fivenodes(t *testing.T) {
 	go func() { node5.SyncAccount() }()
 	time.Sleep(2 * time.Second)
 
-	require.Equal(t, acc1.String(), node1.GetAccount().String())
+	//require.Equal(t, acc1.String(), node1.GetAccount().String())
 	require.Equal(t, acc2.String(), node2.GetAccount().String())
 	require.Equal(t, acc3.String(), node3.GetAccount().String())
 	require.Equal(t, acc4.String(), node4.GetAccount().String())

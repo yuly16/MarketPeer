@@ -28,6 +28,7 @@ type MinerConf struct {
 	Bootstrap         *block.BlockChain
 	BlockTransactions int               // how many transactions in a block
 	KVFactory         storage.KVFactory // kv factory to create Blocks
+	Attacker          bool
 }
 
 // Miner is a full node in Epfer network
@@ -48,6 +49,7 @@ type Miner struct {
 
 	askForBlocksFutures map[int]chan *types.AskForBlockReplyMessage
 
+	attacker bool
 	// Service
 	stat int32
 }
@@ -63,6 +65,7 @@ func NewMiner(conf MinerConf) *Miner {
 	m.kvFactory = conf.KVFactory
 	m.accountAddr = conf.AccountAddr
 	m.askForBlocksFutures = make(map[int]chan *types.AskForBlockReplyMessage)
+	m.attacker = conf.Attacker
 	m.logger = logging.RootLogger.With().Str("Miner", fmt.Sprintf("%s", conf.Addr)).Logger()
 	m.logger.Info().Msgf("miner created:\n %s", m.chain.String())
 	m.registerCallbacks()

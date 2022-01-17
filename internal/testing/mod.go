@@ -164,6 +164,7 @@ type configTemplate struct {
 	kvFactory    chainStorage.KVFactory
 	acc          *account.Account // TODO: update WalletConf directly with Account
 	blocktxns    int              // how many transactions in a block
+	attacker bool
 }
 
 func newConfigTemplate() configTemplate {

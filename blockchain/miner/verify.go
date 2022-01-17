@@ -19,6 +19,10 @@ func (m *Miner) verifyTxn(txn *transaction.SignedTransaction, worldState storage
 }
 
 func (m *Miner) doVerifyTxn(txn *transaction.SignedTransaction, worldState storage.KV) error {
+	if m.attacker {
+		m.logger.Warn().Msgf("attacker directly pass the verify")
+		return nil
+	}
 	// 1. verify signature and sender
 	publicKey, err := crypto.Ecrecover(txn.Digest, txn.Signature)
 	if err != nil {

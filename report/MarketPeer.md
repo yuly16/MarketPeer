@@ -89,7 +89,7 @@ The miners are the key components of the blockchain network, they are responsibl
 - physically store the blocks in the blockchain
 - verify and execute the transactions sent by Wallets
 - produce new blocks based on Bitcoin-style PoW, and broadcast it to other miners
-- verify the blocks broadcasted by other miners
+- verify the blocks broadcasted by other miners. if it finds it lags behind a lot of blocks, it will ask other miner for latest blocks.
 
 As we adopt ethereum-alike blockchain network. The biggest difference from Bitcoin block is that it also contains the `WorldState`, which is a mapping between `AccountAddress` and `AccountState`. The `AccountState` is also a KV representing the digial assets. Further, we make serveral simplified assumptions: (1) the difficulty of the network is fixed, not dynamically adapted; (2) use hash map rather than Merkle tree as the KV interface. To faciliate above functionalites, we also define a new message: `BlockMessage` which is used to broadcast the block to other miners.
 
@@ -186,23 +186,25 @@ Main contribution is highlighted with bold text.
 
 ### BlockChain Evaluation
 
-- all good nodes
-  - 3 nodes. node submit txns
-  - what if fork happens
-  - concurrent submit txns
+Considering our implemented blockchain is layer-1 and PoW based, its TPS is bounded by the PoW process and broadcast overhead. The performance is not a vital metric. So we mainly evaluate the *correctness* and *availability* of the blockchain under different settings. For all evaluations below, we fix the PoW difficulty, such that each block is mined every ~500ms. And each block only contains one transaction.
 
-- attackers to the PoW
-  - fork handles
-  - attacker cannot rule the network. as long as it is below 51%
-  - 51% attack
+#### Without attackers
 
-- - ​
+For each evaluation, we will specify different number of nodes and different topography. Then the nodes will submit some valid transactions concurrently. The expected result is (1) all transactions should be succuessful eventually (2) the chain in each miner should be the same eventually. The test code can be found in `blockchain/tests`.
+
+- 3 nodes, complete graph. every node will do two value transfers
+- 5 nodes, 1,2,3 complete subgraph, 4,5 complete subgraph. 1<->4, 2<->5. node 1, 2, 3 will do two value transfers respectively and concurrently
+- 7 nodes, 1,2,3 complete subgraph, 4,5 complete subgraph, 6,7 complete subgraph. 1<->4, 2<->5; 3<->7,6<->4; node 1, 2, 3 will do five value transfers respectively and concurrently
+
+All tests are in expectation and the TPS is approxiamately 1, which is consistent with the blocking mining time.
+
+#### With attackers
+
+- 5 nodes, 1,2,3 complete subgraph, 4,5 complete subgraph; node 2, 3 will do two value transfers respectively and concurrently. attacker 1 will submit 4 transactions
+- attack mode: attacker ignore others' transactions and block, only verify its own submitted transactions.
+- expectation: node 2,3,4,5 have consistent blockchain and not affected by attacker 1
+
+Good nodes have higher CPU power, such that their agreed chain is always longer than the attacker, so attacker has no chance to inject his faulty transaction to the chain. The test results are consistent with expectations. For the same index of the block, the good block timestamp is always smaller than the bad block, implying that the good chain is always longer.
 
 
-
-
-
-
-
-## unused
 

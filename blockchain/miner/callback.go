@@ -10,9 +10,14 @@ import (
 )
 
 func (m *Miner) WalletTxnMsgCallback(msg types.Message, pkt transport.Packet) error {
+
 	logger := m.logger.With().Str("callback", "TxnMsg").Logger()
 	txn := msg.(*types.WalletTransactionMessage)
 	logger.Info().Msgf("receive txn msg: %s", txn.String())
+	if m.attacker && pkt.Header.Source != m.addr {
+		logger.Info().Msgf("attacker dont process txns from other addrs")
+		return nil
+	}
 	m.txnCh <- &txn.Txn
 	logger.Debug().Msgf("txn sent to txnVerifyd: %s", txn.Txn.String())
 	return nil
@@ -21,7 +26,10 @@ func (m *Miner) WalletTxnMsgCallback(msg types.Message, pkt transport.Packet) er
 func (m *Miner) BlockMsgCallback(msg types.Message, pkt transport.Packet) error {
 	//logger := m.logger.With().Str("callback", "BlockMsg").Logger()
 	logger := m.logger.With().Str("callback", "BlockMsg").Logger()
-
+	if m.attacker && pkt.Header.Source != m.addr {
+		logger.Info().Msgf("attacker dont process block from other miners")
+		return nil
+	}
 	blockMsg := msg.(*types.BlockMessage)
 	raw := blockMsg.Block
 	reconstruct := block.NewBlockBuilder(m.kvFactory)
