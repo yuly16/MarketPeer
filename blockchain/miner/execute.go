@@ -253,7 +253,15 @@ func (m *Miner) createContract(txn *transaction.SignedTransaction, worldState st
 		StorageRoot: m.kvFactory(),
 		Code:        txn.Txn.Code,
 	}
-	err := worldState.Put(txn.Txn.To.String(), &state)
+	from_state, err := RetrieveState(txn.Txn.From.String(), worldState)
+	if err != nil {
+		return fmt.Errorf("Fail to retrive target contract: ", err)
+	}
+	from_state.Nonce += 1
+	if err := worldState.Put(txn.Txn.From.String(), from_state); err != nil {
+		return fmt.Errorf("cannot put from addr and state to KV: %w", err)
+	}
+	err = worldState.Put(txn.Txn.To.String(), &state)
 	if err != nil {
 		return fmt.Errorf("put contract error: %w", err)
 	}

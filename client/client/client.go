@@ -46,7 +46,6 @@ func (c *Client) Stop() {
 }
 
 func (c *Client) StoreProduct(key uint, product Product) error {
-	fmt.Println(key)
 	err := c.ChordNode.Put(key, product)
 	if err != nil {
 		return err
@@ -63,7 +62,6 @@ func (c *Client) StoreProductString(key string, product Product) error {
 }
 
 func (c *Client) ReadProduct(key uint) (Product, bool) {
-	fmt.Println(key)
 	value, ok, _ := c.ChordNode.Get(key)
 	valueBytes, _ := json.Marshal(value)
 	product := Product{}
@@ -101,4 +99,22 @@ func (c *Client) CreateContract(contract_name string, code string, acceptor_acco
 	}
 	
 	return contract_address, nil
+}
+
+func (c *Client) StoreAccount(key string, account Account) error {
+	err := c.ChordNode.Put(c.ChordNode.HashKey(key), account)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) ReadAccount(key string) (Account, bool) {
+	value, ok, _ := c.ChordNode.Get(c.ChordNode.HashKey(key))
+	valueBytes, _ := json.Marshal(value)
+	account := Account{}
+	if ok {
+		_ = json.Unmarshal(valueBytes, &account)
+	}
+	return account, ok
 }

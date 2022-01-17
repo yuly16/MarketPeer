@@ -25,7 +25,7 @@ func NewChord(messager peer.Messaging, conf peer.Configuration) *Chord {
 	chordInstance.successor = MutexString{data: ""}
 
 	chordId := chordInstance.HashKey(conf.Socket.GetAddress())
-	fmt.Printf("%s: %d\n", conf.Socket.GetAddress(), chordId)
+	//fmt.Printf("%s: %d\n", conf.Socket.GetAddress(), chordId)
 	chordInstance.chordId = chordId
 
 	chordInstance.fingerTable = NewFingerTable(conf)

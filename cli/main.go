@@ -271,11 +271,36 @@ func main() {
 		}
 		return nil
 	}
+	inputaccount_validate := func(input string) error {
+		params := strings.Split(input, " ")
+		if len(params) == 2 {
+			return nil
+		} else {
+			return fmt.Errorf("error")
+		}
+	}
+	viewaccount_validate := func(input string) error {
+		params := strings.Split(input, " ")
+		if len(params) == 1 {
+			return nil
+		} else {
+			return fmt.Errorf("error")
+		}
+	}
 	// Front-end CLI UI
 	for {
 		cmd_prompt := promptui.Select{
-			Label: "Select your command:",
-			Items: []string{"View Products", "Input Product Information", "Transfer", "ShowAccount", "ShowChain", "Propose Smart Contract", "Accept Contract", "Exit"},
+			Label: "Select your command",
+			Items: []string{"View Products",
+				"Input Product Information",
+				"View Account",
+				"Input Account Information",
+				"Transfer",
+				"ShowAccount",
+				"ShowChain",
+				"Propose Smart Contract", 
+				"Accept Contract",
+				"Exit"},
 		}
 
 		is_exit := false
@@ -317,6 +342,14 @@ func main() {
 		transfer_prompt := promptui.Prompt{
 			Label:	"[Transfer] input transfer (format: Value To)",
 			Validate: transfer_validate,
+		}
+		inputaccount_prompt := promptui.Prompt{
+			Label:	"[Input Account] input account information",
+			Validate: inputaccount_validate,
+		}
+		viewaccount_prompt := promptui.Prompt{
+			Label:	"[View Account] input account name",
+			Validate: viewaccount_validate,
 		}
 		switch cmd {
 		case "Add Peer":
@@ -462,6 +495,38 @@ func main() {
 			if err != nil {
 				fmt.Println("Fail to accept contract: ", err)
 				break
+			}
+		case "Input Account Information":
+			info, err := inputaccount_prompt.Run()
+			if err != nil {
+				fmt.Printf("Prompt failed %v\n", err)
+				return
+			} else {
+				infos := strings.Split(info, " ")
+				address := infos[0]
+				accountInfo := infos[1]
+				accountStruct := client.Account{
+					accountInfo,
+				}
+				err := clientNode.StoreAccount(address, accountStruct)
+				if err != nil {
+					fmt.Println("store account error")
+					fmt.Println(err)
+					return
+				}
+			}
+		case "View Account":
+			info, err := viewaccount_prompt.Run()
+			if err != nil {
+				fmt.Printf("Prompt failed %v\n", err)
+				return
+			} else {
+				accountStruct, exist := clientNode.ReadAccount(info)
+				if exist {
+					fmt.Printf("AccountInfo: address: %s, account_address: %s\n", info, accountStruct.AccountAddress)
+				} else {
+					fmt.Println("the account doesn't exist in chord. ")
+				}
 			}
 		case "Transfer":
 			info, _ := transfer_prompt.Run()
