@@ -3,6 +3,7 @@ package block
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"go.dedis.ch/cs438/blockchain/transaction"
 	"sync"
@@ -10,14 +11,14 @@ import (
 	"go.dedis.ch/cs438/blockchain/storage"
 )
 
+var ErrBlockTooNew = errors.New("block is too new")
+
 // BlockChain is a chain of Blocks
 type BlockChain struct {
 	// TODO: may be we could move this mu to miner level, then it will be easier to synchronize
 	mu        sync.Mutex
 	blocksMap map[string]*Block
 	ends      []*Block // ends has same parent hash, they are forks in the end. their number is the same
-
-	blocks []*Block // let's first store it in an array
 }
 
 func NewBlockChain() *BlockChain {
@@ -26,8 +27,47 @@ func NewBlockChain() *BlockChain {
 }
 
 func NewBlockChainWithGenesis(genesis *Block) *BlockChain {
-	return &BlockChain{blocks: []*Block{genesis},
+	return &BlockChain{
 		blocksMap: map[string]*Block{genesis.Hash(): genesis}, ends: []*Block{genesis}}
+}
+
+func (bc *BlockChain) GetBlock(number int) (*Block, error) {
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
+	end := bc.ends[0]
+	if number < 0 {
+		return nil, fmt.Errorf("number(%d)<0", number)
+	}
+	if end.Header.Number < number {
+		return nil, fmt.Errorf("number(%d) too new, end's number=%d", number, end.Header.Number)
+	}
+	if end.Header.Number == number {
+		return end, nil
+	}
+	ptr := end.Header.ParentHash
+	for ptr != DUMMY_PARENT_HASH {
+		b := bc.blocksMap[ptr]
+		if b.Header.Number == number {
+			return b, nil
+		}
+		ptr = b.Header.ParentHash
+	}
+	panic(fmt.Errorf("it shall not be reached"))
+}
+
+func (bc *BlockChain) OverWrite(blocks []*Block) error {
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
+
+	genesis := blocks[len(blocks)-1]
+	bc.blocksMap = map[string]*Block{genesis.Hash(): genesis}
+	bc.ends = []*Block{genesis}
+	for i := len(blocks) - 2; i >= 0; i-- {
+		if err := bc.Append(blocks[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (bc *BlockChain) Len() int {
@@ -102,8 +142,8 @@ func (bc *BlockChain) TryAppend(block *Block) (*Block, error) {
 	endsNumber := bc.ends[0].Header.Number
 	// too new
 	if block.Header.Number-endsNumber >= 2 {
-		return nil, fmt.Errorf("block too new(number=%d), cannot connect to ends(number=%d), block=%s",
-			block.Header.Number, endsNumber, block.String())
+		return nil, fmt.Errorf("block too new(number=%d), cannot connect to ends(number=%d), block=%s; %w",
+			block.Header.Number, endsNumber, block.String(), ErrBlockTooNew)
 	}
 
 	if block.Header.Number-endsNumber <= 0 {
@@ -143,8 +183,8 @@ func (bc *BlockChain) Append(block *Block) error {
 	endsNumber := bc.ends[0].Header.Number
 	// too new
 	if block.Header.Number-endsNumber >= 2 {
-		return fmt.Errorf("block too new(number=%d), cannot connect to ends(number=%d), block=%s",
-			block.Header.Number, endsNumber, block)
+		return fmt.Errorf("block too new(number=%d), cannot connect to ends(number=%d), block=%s; %w",
+			block.Header.Number, endsNumber, block.String(), ErrBlockTooNew)
 	}
 
 	// TODO: now we only allow len(ends) = 0
