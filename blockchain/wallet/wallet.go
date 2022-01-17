@@ -250,7 +250,7 @@ func (w *Wallet) TriggerContract(dest account.Address) error {
 
 // Buyer propose a contract by submitting a special transaction
 // transaction.Type = transaction.CREATE_CONTRACT
-func (w *Wallet) ProposeContract() (string, error) {
+func (w *Wallet) ProposeContract(code string) (string, error) {
 	err := w.SyncAccount()
 	for err != nil {
 		w.logger.Warn().Msgf("trigger contract sync account fail: %v", err)
@@ -268,7 +268,7 @@ func (w *Wallet) ProposeContract() (string, error) {
 	contract_addr_8b := [8]byte{}
 	copy(contract_addr_8b[:], contract_address[len(contract_address)-8:])
 
-	txn := transaction.NewProposeContractTransaction(w.account.GetNonce(), 0, *w.GetAccount().GetAddr(), *account.NewAddress(contract_addr_8b))
+	txn := transaction.NewProposeContractTransaction(w.account.GetNonce(), 0, *w.GetAccount().GetAddr(), *account.NewAddress(contract_addr_8b), code)
 	// submit
 	handle := w.SubmitTxn(txn)
 	time.Sleep(1 * time.Second)

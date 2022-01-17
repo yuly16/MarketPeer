@@ -7,7 +7,7 @@ import (
 	z "go.dedis.ch/cs438/internal/testing"
 	"go.dedis.ch/cs438/registry/standard"
 	"go.dedis.ch/cs438/transport/udp"
-	// "os"
+    "io/ioutil"
 	"strings"
 	"time"
 
@@ -73,11 +73,20 @@ func main() {
 		fmt.Println("Here is your input command", 1+1)
 		return nil
 	}
+	// format: (contract name, acceptor address)
+	propose_contract_validate := func(input string) error {
+		params := strings.Split(input, " ")
+		if len(params) != 2 {
+			return fmt.Errorf("propose contract parameters not met")
+		}
+		return nil
+	}
+
 	// Front-end CLI UI
 	for {
 		cmd_prompt := promptui.Select{
 			Label: "Select your command:",
-			Items: []string{"Add Peer", "Init Chord", "Join Chord", "View Products", "Input Product Information", "Exit"},
+			Items: []string{"Add Peer", "Init Chord", "Join Chord", "View Products", "Input Product Information", "Propose Smart Contract", "Exit"},
 		}
 
 		is_exit := false
@@ -110,6 +119,11 @@ func main() {
 			Label:	"[View Product] input product name: ",
 			Validate: viewproduct_validate,
 		}
+		propose_contract_prompt := promptui.Prompt{
+			Label: "[Propose contract] input (contract name, acceptor address): ",
+			Validate: propose_contract_validate,
+		}
+
 		switch cmd {
 		case "Add Peer":
 			address, err := addpeer_prompt.Run()
@@ -161,8 +175,6 @@ func main() {
 						return
 					}
 				}
-
-
 			}
 		case "View Products":
 			info, err := viewproduct_prompt.Run()
@@ -177,10 +189,37 @@ func main() {
 					fmt.Println("the product doesn't exist in chord. ")
 				}
 			}
-			// execution
+		case "Propose Smart Contract":
+			result, err := propose_contract_prompt.Run()
+			if err != nil {
+				fmt.Println("Invalid input form: %v", err)
+				break
+			}
+			
+			// call by cli params
+			params := strings.Split(result, " ")
+			contract_name := params[0]
+			contract_filefolder_path := "../contract_files/"
+			contract_file_path := contract_filefolder_path + contract_name
+			acceptor_address := params[1]
+
+			contract_file_content, err := ioutil.ReadFile(contract_file_path)
+			if err != nil {
+				fmt.Println("Invalid file path: %w", err)
+				break
+			}
+
+			contract_addr, err := clientNode.CreateContract(contract_name, string(contract_file_content), acceptor_address)
+			if err != nil {
+				fmt.Println("Fail to create contract: %v", err)
+				break
+			}
+			fmt.Println("Contract created at account: ", contract_addr)
+
 		case "Exit":
 			clientNode.Stop()
 			is_exit = true
+
 		}
 
 		if is_exit {

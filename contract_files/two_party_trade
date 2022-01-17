@@ -1,0 +1,4 @@
+ASSUME seller.balance > 50
+IF buyer.balance > 10 THEN
+ 	buyer.transfer(5)
+	seller.send("apple", 5)

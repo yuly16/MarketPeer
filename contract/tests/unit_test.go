@@ -478,9 +478,7 @@ func Test_Contract_Marshal(t *testing.T) {
 		"1", // contract_id
 		"Two-party commodity purchase contract", // contract_name
 		contract_code, // plain_code
-		"127.0.0.1", // proposer_addr
 		"00000001", // proposer_account
-		"127.0.0.2", // acceptor_addr
 		"00000002", // acceptor_account
 	)
 
@@ -512,9 +510,7 @@ func Test_Contract_State_Tree(t *testing.T) {
 		"1", // contract_id
 		"Two-party commodity purchase contract", // contract_name
 		contract_code, // plain_code
-		"127.0.0.1", // proposer_addr
 		"00000001", // proposer_account
-		"127.0.0.2", // acceptor_addr
 		"00000002", // acceptor_account
 	)
 
@@ -557,9 +553,7 @@ func Test_Contract_Execution_Condition(t *testing.T) {
 		"1", // contract_id
 		"Test assumption contract only", // contract_name
 		contract_code_1, // plain_code
-		"127.0.0.1", // proposer_addr
 		acc1_addr, // proposer_account
-		"127.0.0.2", // acceptor_addr
 		acc2_addr, // acceptor_account
 	)
 
@@ -573,9 +567,7 @@ func Test_Contract_Execution_Condition(t *testing.T) {
 		"1", // contract_id
 		"Test assumption contract only", // contract_name
 		contract_code_2, // plain_code
-		"127.0.0.1", // proposer_addr
 		acc3_addr, // proposer_account
-		"127.0.0.2", // acceptor_addr
 		acc4_addr, // acceptor_account
 	)
 
@@ -615,9 +607,7 @@ func Test_Contract_Execution_IfClause(t *testing.T) {
 		"1", // contract_id
 		"Test collect actions from if clauses", // contract_name
 		contract_code, // plain_code
-		"127.0.0.1", // proposer_addr
 		acc1_addr, // proposer_account
-		"127.0.0.2", // acceptor_addr
 		acc2_addr, // acceptor_account
 	)
 
@@ -668,9 +658,7 @@ func Test_Contract_Execution_Network(t *testing.T) {
 		"1", // contract_id
 		"Test contract execution", // contract_name
 		contract_code, // plain_code
-		"127.0.0.1", // proposer_addr
 		acc_buyer.GetAddr().String(), // proposer_account
-		"127.0.0.2", // acceptor_addr
 		acc_seller.GetAddr().String(), // acceptor_account
 	)
 	contract_bytecode, err := contract_inst.Marshal()
@@ -705,7 +693,7 @@ func Test_Contract_Execution_Network(t *testing.T) {
 
 	// trigger the contract from the seller side to contract account
 	txn := transaction.NewTransaction(0, 0, *node2.GetAccountAddr(), *acc_contract.GetAddr())
-	node1.SubmitTxn(txn)
+	node2.SubmitTxn(txn)
 
 	time.Sleep(10 * time.Second)
 	fmt.Printf("node1 chain: \n%s", node1.GetChain())

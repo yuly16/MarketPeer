@@ -116,6 +116,7 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 	if txn.Txn.From.String() != contract_inst.GetAcceptorAccount() {
 		return fmt.Errorf("contract not triggered by acceptor: %s", txn.Txn.From.String())
 	}
+	
 
 	// 2. check conditions and collect actions in contract
 	valid, validate_err := contract_inst.ValidateAssumptions(worldState)
@@ -212,13 +213,13 @@ func (m *Miner) doContract(txn *transaction.SignedTransaction, worldState storag
 		}
 	}
 
+	acceptor_state.Nonce += 1 // increment nonce
 	if err_put_proposer := worldState.Put(proposer_account, proposer_state); err_put_proposer != nil {
 		return fmt.Errorf("cannot put proposer addr and state to KV: %w", err_put_proposer)
 	}
 	if err_put_acceptor := worldState.Put(acceptor_account, acceptor_state); err_put_acceptor != nil {
 		return fmt.Errorf("cannot put acceptor addr and state to KV: %w", err_put_acceptor)
 	}
-	proposer_state.Nonce += 1
 
 	return nil
 }

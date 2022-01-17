@@ -1,8 +1,11 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
+	"encoding/json"
+
+	"github.com/rs/xid"
+	"go.dedis.ch/cs438/contract/impl"
 	"go.dedis.ch/cs438/blockchain"
 	"go.dedis.ch/cs438/chord"
 	"go.dedis.ch/cs438/peer"
@@ -72,4 +75,30 @@ func (c *Client) ReadProduct(key uint) (Product, bool) {
 
 func (c *Client) ReadProductString(key string) (Product, bool) {
 	return c.ReadProduct(c.ChordNode.HashKey(key))
+}
+// API open to CLI caller, need to return contract account
+func (c *Client) CreateContract(contract_name string, code string, acceptor_account string) (string, error) {
+	
+	contract_inst := impl.NewContract(
+		xid.New().String(), // unique contract_id
+		contract_name, // contract_name
+		code, // plain_code
+		c.BlockChainFullNode.GetAccount().GetAddr().String(), // proposer_account
+		acceptor_account, // acceptor_account
+	)
+	contract_bytecode, err := contract_inst.Marshal()
+	if err != nil {
+		return "", fmt.Errorf("client fail to marshal contract: %w", err)
+	}
+
+	// print contract to front end
+	fmt.Print(contract_inst.String())
+
+	// call wallet api to propose contract
+	contract_address, err := c.BlockChainFullNode.Wallet.ProposeContract(string(contract_bytecode))
+	if err != nil {
+		return "", fmt.Errorf("wallet fail to propose contract: %w", err)
+	}
+	
+	return contract_address, nil
 }

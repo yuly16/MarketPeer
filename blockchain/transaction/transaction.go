@@ -29,13 +29,14 @@ func NewTransaction(nonce int, value int, from account.Address, to account.Addre
 	return txn
 }
 
-func NewProposeContractTransaction(nonce int, value int, from account.Address, to account.Address) Transaction {
+func NewProposeContractTransaction(nonce int, value int, from account.Address, to account.Address, code string) Transaction {
 	txn := Transaction{}
 	txn.Nonce = nonce
 	txn.Value = value
 	txn.Type = CREATE_CONTRACT
 	txn.From = from
 	txn.To = to
+	txn.Code = code
 	txn.V = "abc"
 	txn.S = "def"
 	txn.R = "ghi"

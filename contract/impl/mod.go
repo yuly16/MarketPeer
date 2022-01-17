@@ -22,9 +22,7 @@ type Contract struct {
 	Code_ast 	 	 parser.Code
 	Code_plain		 string
 	State_tree		 *StateNode
-	Proposer_addr	 string
 	Proposer_account string
-	Acceptor_addr	 string
 	Acceptor_account string
 }
 
@@ -32,9 +30,7 @@ type Contract struct {
 func NewContract(contract_id string,
 				 contract_name string,
 				 plain_code string,
-				 proposer_addr string,
 				 proposer_account string,
-				 acceptor_addr string,
 				 acceptor_account string) contract.SmartContract {
 	
 	code, err := parser.Parse(plain_code)
@@ -49,9 +45,7 @@ func NewContract(contract_id string,
 		Code_ast: code,
 		Code_plain: plain_code,
 		State_tree: state_ast,
-		Proposer_addr: proposer_addr,
 		Proposer_account: proposer_account,
-		Acceptor_addr: acceptor_addr,
 		Acceptor_account: acceptor_account,
 	}
 }
@@ -268,8 +262,8 @@ func (c Contract) String() string {
 	out.WriteString("| Contract: " + c.Contract_name + "\n")
 	out.WriteString("| ID: " + c.Contract_id + "\n")
 	out.WriteString("=================================================================\n")
-	out.WriteString("| Proposer: [" + c.Proposer_addr + "] (" + c.Proposer_account + ")\n")
-	out.WriteString("| Acceptor: [" + c.Acceptor_addr + "] (" + c.Acceptor_account + ")\n")
+	out.WriteString("| Proposer: [" + c.Proposer_account + "] \n")
+	out.WriteString("| Acceptor: [" + c.Acceptor_account + "] \n")
 	out.WriteString("=================================================================\n")
 	out.WriteString("| Contract code: " + "\n")
 	out.WriteString(c.Code_plain + "\n")
