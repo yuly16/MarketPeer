@@ -10,9 +10,14 @@ import (
 )
 
 func (m *Miner) WalletTxnMsgCallback(msg types.Message, pkt transport.Packet) error {
+
 	logger := m.logger.With().Str("callback", "TxnMsg").Logger()
 	txn := msg.(*types.WalletTransactionMessage)
 	logger.Info().Msgf("receive txn msg: %s", txn.String())
+	if m.attacker && pkt.Header.Source != m.addr {
+		logger.Info().Msgf("attacker dont process txns from other addrs")
+		return nil
+	}
 	m.txnCh <- &txn.Txn
 	logger.Debug().Msgf("txn sent to txnVerifyd: %s", txn.Txn.String())
 	return nil
@@ -21,7 +26,10 @@ func (m *Miner) WalletTxnMsgCallback(msg types.Message, pkt transport.Packet) er
 func (m *Miner) BlockMsgCallback(msg types.Message, pkt transport.Packet) error {
 	//logger := m.logger.With().Str("callback", "BlockMsg").Logger()
 	logger := m.logger.With().Str("callback", "BlockMsg").Logger()
-
+	if m.attacker && pkt.Header.Source != m.addr {
+		logger.Info().Msgf("attacker dont process block from other miners")
+		return nil
+	}
 	blockMsg := msg.(*types.BlockMessage)
 	raw := blockMsg.Block
 	reconstruct := block.NewBlockBuilder(m.kvFactory)
@@ -65,7 +73,7 @@ func (m *Miner) BlockMsgCallback(msg types.Message, pkt transport.Packet) error 
 	blockMsg.Block = *reconstruct.Build()
 	logger.Info().Msgf("receive block msg: %s", blockMsg.String())
 
-	m.blockCh <- &blockMsg.Block
+	m.blockCh <- blockMsg
 
 	return nil
 }
@@ -120,5 +128,49 @@ func (m *Miner) VerifyTxnMsgCallback(msg types.Message, pkt transport.Packet) er
 		return err
 	}
 	logger.Info().Msgf("send back verify txn reply=%s to %s", reply.String(), verifyMsg.NetworkAddr)
+	return nil
+}
+
+func (m *Miner) AskForBlockMsgCallback(msg types.Message, pkt transport.Packet) error {
+	logger := m.logger.With().Str("callback", "AskForBlock").Logger().Level(zerolog.InfoLevel)
+	ask := msg.(*types.AskForBlockMessage)
+	logger.Info().Msgf("receive msg: %s", ask.String())
+	b, err := m.chain.GetBlock(ask.Number)
+	var reply *types.AskForBlockReplyMessage
+	if err != nil {
+		reply = &types.AskForBlockReplyMessage{
+			TimeStamp: ask.TimeStamp,
+			Block:     block.Block{},
+			Success:   false,
+		}
+		logger.Warn().Msgf("cannot get block(%d), reason=%v", ask.Number, err)
+	} else {
+		reply = &types.AskForBlockReplyMessage{
+			TimeStamp: ask.TimeStamp,
+			Block:     *b,
+			Success:   true,
+		}
+		logger.Info().Msgf("get block(%d)", ask.Number)
+	}
+	if err := m.messaging.Unicast(ask.From, reply); err != nil {
+		return fmt.Errorf("ask for block msg callback error: %w", err)
+	}
+	return nil
+}
+
+func (m *Miner) AskForBlockReplyMsgCallback(msg types.Message, pkt transport.Packet) error {
+	logger := m.logger.With().Str("callback", "VerifyTransaction").Logger().Level(zerolog.InfoLevel)
+	reply := msg.(*types.AskForBlockReplyMessage)
+	logger.Info().Msgf("receive msg: %s", reply.String())
+
+	future, ok := m.askForBlocksFutures[reply.TimeStamp]
+	if !ok {
+		logger.Warn().Msgf("msg has no future: %s", reply.String())
+		return nil
+	}
+	select {
+	case future <- reply:
+	default:
+	}
 	return nil
 }

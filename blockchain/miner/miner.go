@@ -28,6 +28,7 @@ type MinerConf struct {
 	Bootstrap         *block.BlockChain
 	BlockTransactions int               // how many transactions in a block
 	KVFactory         storage.KVFactory // kv factory to create Blocks
+	Attacker          bool
 }
 
 // Miner is a full node in Epfer network
@@ -41,11 +42,14 @@ type Miner struct {
 
 	mu          sync.Mutex // sync txnd and blockd
 	txnCh       chan *transaction.SignedTransaction
-	blockCh     chan *block.Block
+	blockCh     chan *types.BlockMessage
 	blocktxns   int               // how many transactions in a block
 	kvFactory   storage.KVFactory // kv factory to create Blocks
 	accountAddr *account.Address
 
+	askForBlocksFutures map[int]chan *types.AskForBlockReplyMessage
+
+	attacker bool
 	// Service
 	stat int32
 }
@@ -56,10 +60,12 @@ func NewMiner(conf MinerConf) *Miner {
 	m.addr = conf.Addr
 	m.chain = conf.Bootstrap
 	m.txnCh = make(chan *transaction.SignedTransaction, 100)
-	m.blockCh = make(chan *block.Block, 100)
+	m.blockCh = make(chan *types.BlockMessage, 100)
 	m.blocktxns = conf.BlockTransactions
 	m.kvFactory = conf.KVFactory
 	m.accountAddr = conf.AccountAddr
+	m.askForBlocksFutures = make(map[int]chan *types.AskForBlockReplyMessage)
+	m.attacker = conf.Attacker
 	m.logger = logging.RootLogger.With().Str("Miner", fmt.Sprintf("%s", conf.Addr)).Logger()
 	m.logger.Info().Msgf("miner created:\n %s", m.chain.String())
 	m.registerCallbacks()
@@ -97,6 +103,8 @@ func (m *Miner) registerCallbacks() {
 	m.messaging.RegisterMessageCallback(types.BlockMessage{}, m.BlockMsgCallback)
 	m.messaging.RegisterMessageCallback(types.SyncAccountMessage{}, m.SyncMsgCallback)
 	m.messaging.RegisterMessageCallback(types.VerifyTransactionMessage{}, m.VerifyTxnMsgCallback)
+	m.messaging.RegisterMessageCallback(types.AskForBlockMessage{}, m.AskForBlockMsgCallback)
+	m.messaging.RegisterMessageCallback(types.AskForBlockReplyMessage{}, m.AskForBlockReplyMsgCallback)
 
 }
 

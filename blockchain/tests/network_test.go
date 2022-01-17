@@ -471,7 +471,7 @@ func Test_Network_Transfer_Epfer(t *testing.T) {
 
 }
 
-func Test_Network_Transfer_Epfer_complex(t *testing.T) {
+func Test_Network_Transfer_Epfer_complex_threenodes(t *testing.T) {
 	transp := channel.NewTransport()
 
 	accountFactory := func(balance uint, key string, value interface{}) (*account.Account, *ecdsa.PrivateKey) {
@@ -653,8 +653,268 @@ func Test_Network_Transfer_Epfer_complex_fivenodes(t *testing.T) {
 
 }
 
-// TODO: a node send several txns
-// TODO: test txn verification. the invalid cases!
-// TODO: other chain might need to overwrite this chain
+func Test_Network_Transfer_Epfer_complex_attacker_fivenodes(t *testing.T) {
+	transp := channel.NewTransport()
+
+	accountFactory := func(balance uint, key string, value interface{}) (*account.Account, *ecdsa.PrivateKey) {
+		privateKey1, err := crypto.GenerateKey()
+		require.NoError(t, err)
+		publicKey1 := &privateKey1.PublicKey
+		ac1 := account.NewAccountBuilder(crypto.FromECDSAPub(publicKey1), storage.CreateSimpleKV).
+			WithBalance(balance).WithKV(key, value).Build()
+		return ac1, privateKey1
+	}
+
+	acc1, pri1 := accountFactory(100, "apple", 10)
+	acc2, pri2 := accountFactory(200, "orange", 20)
+	acc3, pri3 := accountFactory(300, "cola", 100)
+	acc4, pri4 := accountFactory(400, "laptop", 100)
+	acc5, pri5 := accountFactory(500, "iphone", 100)
+
+	genesisFactory := func() *block.Block {
+		return generateGenesisBlock(storage.CreateSimpleKV, acc1, acc2, acc3, acc4, acc5)
+	}
+
+	attackerFactory := func(acc *account.Account, pri *ecdsa.PrivateKey) *blockchain.FullNode {
+		sock, err := transp.CreateSocket("127.0.0.1:0")
+		require.NoError(t, err)
+		//crypto.
+		fullNode, _ := z.NewTestFullNode(t,
+			z.WithSocket(sock),
+			z.WithMessageRegistry(standard.NewRegistry()),
+			z.WithPrivateKey(pri),
+			z.WithAccount(acc),
+			z.WithAttacker(),
+			z.WithGenesisBlock(genesisFactory()),
+			z.WithAntiEntropy(100*time.Millisecond),
+		)
+		return fullNode
+	}
+
+	nodeFactory := func(acc *account.Account, pri *ecdsa.PrivateKey) *blockchain.FullNode {
+		sock, err := transp.CreateSocket("127.0.0.1:0")
+		require.NoError(t, err)
+		//crypto.
+		fullNode, _ := z.NewTestFullNode(t,
+			z.WithSocket(sock),
+			z.WithMessageRegistry(standard.NewRegistry()),
+			z.WithPrivateKey(pri),
+			z.WithAccount(acc),
+			z.WithGenesisBlock(genesisFactory()),
+			z.WithAntiEntropy(100*time.Millisecond),
+		)
+		return fullNode
+	}
+
+	node1 := attackerFactory(acc1, pri1)
+	node2 := nodeFactory(acc2, pri2)
+	node3 := nodeFactory(acc3, pri3)
+	node4 := nodeFactory(acc4, pri4)
+	node5 := nodeFactory(acc5, pri5)
+
+	node1.AddPeer(node2, node3, node4)
+	node2.AddPeer(node1, node3, node5)
+	node3.AddPeer(node1, node2)
+	node4.AddPeer(node1, node5)
+	node5.AddPeer(node4, node2)
+
+	node1.Start()
+	node2.Start()
+	node3.Start()
+	node4.Start()
+	node5.Start()
+	time.Sleep(200 * time.Millisecond)
+
+	go func() {
+		txn := transaction.NewTransaction(0, 10, *node2.GetAccountAddr(), *node1.GetAccountAddr())
+		node1.SubmitTxn(txn)
+
+		txn1 := transaction.NewTransaction(1, 10, *node2.GetAccountAddr(), *node1.GetAccountAddr())
+		node1.SubmitTxn(txn1)
+
+		txn2 := transaction.NewTransaction(2, 10, *node2.GetAccountAddr(), *node1.GetAccountAddr())
+		node1.SubmitTxn(txn2)
+		txn3 := transaction.NewTransaction(3, 10, *node2.GetAccountAddr(), *node1.GetAccountAddr())
+		node1.SubmitTxn(txn3)
+	}()
+
+	go func() {
+		err := node2.TransferEpfer(*node3.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+		err = node2.TransferEpfer(*node3.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+	}()
+
+	go func() {
+		err := node3.TransferEpfer(*node1.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+		err = node3.TransferEpfer(*node1.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+	}()
+
+	time.Sleep(10 * time.Second)
+	//require.Equal(t, node1.GetChain().Hash(), node2.GetChain().Hash())
+	require.Equal(t, node2.GetChain().Hash(), node3.GetChain().Hash())
+	require.Equal(t, node3.GetChain().Hash(), node4.GetChain().Hash())
+	require.Equal(t, node4.GetChain().Hash(), node5.GetChain().Hash())
+
+	require.Equal(t, 5, node2.GetChain().Len())
+	fmt.Printf("node1 chain: \n%s", node1.GetChain())
+	fmt.Printf("node2 chain: \n%s", node2.GetChain())
+
+	go func() {
+		node1.SyncAccount()
+	}()
+	go func() { node2.SyncAccount() }()
+	go func() { node3.SyncAccount() }()
+
+	go func() { node4.SyncAccount() }()
+	go func() { node5.SyncAccount() }()
+	time.Sleep(2 * time.Second)
+
+	//require.Equal(t, acc1.String(), node1.GetAccount().String())
+	require.Equal(t, acc2.String(), node2.GetAccount().String())
+	require.Equal(t, acc3.String(), node3.GetAccount().String())
+	require.Equal(t, acc4.String(), node4.GetAccount().String())
+	require.Equal(t, acc5.String(), node5.GetAccount().String())
+
+}
+
+func Test_Network_Transfer_Epfer_complex_sevennodes(t *testing.T) {
+	transp := channel.NewTransport()
+
+	accountFactory := func(balance uint, key string, value interface{}) (*account.Account, *ecdsa.PrivateKey) {
+		privateKey1, err := crypto.GenerateKey()
+		require.NoError(t, err)
+		publicKey1 := &privateKey1.PublicKey
+		ac1 := account.NewAccountBuilder(crypto.FromECDSAPub(publicKey1), storage.CreateSimpleKV).
+			WithBalance(balance).WithKV(key, value).Build()
+		return ac1, privateKey1
+	}
+
+	acc1, pri1 := accountFactory(100, "apple", 10)
+	acc2, pri2 := accountFactory(200, "orange", 20)
+	acc3, pri3 := accountFactory(300, "cola", 100)
+	acc4, pri4 := accountFactory(400, "laptop", 100)
+	acc5, pri5 := accountFactory(500, "iphone", 100)
+	acc6, pri6 := accountFactory(600, "iphone6", 100)
+	acc7, pri7 := accountFactory(700, "iphone7", 100)
+
+	genesisFactory := func() *block.Block {
+		return generateGenesisBlock(storage.CreateSimpleKV, acc1, acc2, acc3, acc4, acc5, acc6, acc7)
+	}
+
+	nodeFactory := func(acc *account.Account, pri *ecdsa.PrivateKey) *blockchain.FullNode {
+		sock, err := transp.CreateSocket("127.0.0.1:0")
+		require.NoError(t, err)
+		//crypto.
+		fullNode, _ := z.NewTestFullNode(t,
+			z.WithSocket(sock),
+			z.WithMessageRegistry(standard.NewRegistry()),
+			z.WithPrivateKey(pri),
+			z.WithAccount(acc),
+			z.WithGenesisBlock(genesisFactory()),
+			z.WithAntiEntropy(100*time.Millisecond),
+		)
+		return fullNode
+	}
+
+	node1 := nodeFactory(acc1, pri1)
+	node2 := nodeFactory(acc2, pri2)
+	node3 := nodeFactory(acc3, pri3)
+	node4 := nodeFactory(acc4, pri4)
+	node5 := nodeFactory(acc5, pri5)
+	node6 := nodeFactory(acc6, pri6)
+	node7 := nodeFactory(acc7, pri7)
+
+	node1.AddPeer(node2, node3, node4)
+	node2.AddPeer(node1, node3, node5)
+	node3.AddPeer(node1, node2)
+	node4.AddPeer(node1, node5)
+	node5.AddPeer(node4, node2)
+
+	node6.AddPeer(node3, node7)
+	node7.AddPeer(node6, node4)
+
+	node1.Start()
+	node2.Start()
+	node3.Start()
+	node4.Start()
+	node5.Start()
+	node6.Start()
+	node7.Start()
+
+	time.Sleep(200 * time.Millisecond)
+
+	go func() {
+		err := node1.TransferEpfer(*node2.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+		err = node1.TransferEpfer(*node2.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+		err = node1.TransferEpfer(*node2.GetAccount().GetAddr(), 0)
+		require.NoError(t, err)
+		err = node1.TransferEpfer(*node2.GetAccount().GetAddr(), 0)
+		require.NoError(t, err)
+		err = node1.TransferEpfer(*node2.GetAccount().GetAddr(), 0)
+		require.NoError(t, err)
+	}()
+
+	go func() {
+		err := node2.TransferEpfer(*node3.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+		err = node2.TransferEpfer(*node3.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+		err = node2.TransferEpfer(*node3.GetAccount().GetAddr(), 0)
+		require.NoError(t, err)
+		err = node2.TransferEpfer(*node3.GetAccount().GetAddr(), 0)
+		require.NoError(t, err)
+		err = node2.TransferEpfer(*node3.GetAccount().GetAddr(), 0)
+		require.NoError(t, err)
+	}()
+
+	go func() {
+		err := node3.TransferEpfer(*node1.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+		err = node3.TransferEpfer(*node1.GetAccount().GetAddr(), 50)
+		require.NoError(t, err)
+		err = node3.TransferEpfer(*node1.GetAccount().GetAddr(), 0)
+		require.NoError(t, err)
+		err = node3.TransferEpfer(*node1.GetAccount().GetAddr(), 0)
+		require.NoError(t, err)
+		err = node3.TransferEpfer(*node1.GetAccount().GetAddr(), 0)
+		require.NoError(t, err)
+	}()
+
+	time.Sleep(20 * time.Second)
+	require.Equal(t, node1.GetChain().Hash(), node2.GetChain().Hash())
+	require.Equal(t, node2.GetChain().Hash(), node3.GetChain().Hash())
+	require.Equal(t, node3.GetChain().Hash(), node4.GetChain().Hash())
+	require.Equal(t, node4.GetChain().Hash(), node5.GetChain().Hash())
+	require.Equal(t, node5.GetChain().Hash(), node6.GetChain().Hash())
+	require.Equal(t, node6.GetChain().Hash(), node7.GetChain().Hash())
+
+	require.Equal(t, 16, node1.GetChain().Len())
+	fmt.Printf("node1 chain: \n%s", node1.GetChain())
+
+	go func() {
+		node1.SyncAccount()
+	}()
+	go func() { node2.SyncAccount() }()
+	go func() { node3.SyncAccount() }()
+
+	go func() { node4.SyncAccount() }()
+	go func() { node5.SyncAccount() }()
+	time.Sleep(2 * time.Second)
+
+	require.Equal(t, acc1.String(), node1.GetAccount().String())
+	require.Equal(t, acc2.String(), node2.GetAccount().String())
+	require.Equal(t, acc3.String(), node3.GetAccount().String())
+	require.Equal(t, acc4.String(), node4.GetAccount().String())
+	require.Equal(t, acc5.String(), node5.GetAccount().String())
+
+}
+
 // TODO: 现在可能造成一种结果，第一个 miner 会一直占优势. 因为其他 miner 只有在他们的 PoW 结束之后才能知道自己白做的, 导致每次都慢一些
 // TODO: 我们需要几个 bot node 不断发 transaction 来推动整个链往前走，这样我们才能 solid 验证 transaction
+// TODO: 节点数多的时候, verifyTxn 需要更长的时间.
+// TODO: 目前我们的 catchup 貌似没有被触发过?

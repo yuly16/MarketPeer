@@ -48,6 +48,7 @@ func buildFullNodeConf(temp *configTemplate) *blockchain.FullNodeConf {
 	conf.Bootstrap = temp.blockchain
 	conf.BlockTransactions = temp.blocktxns
 	conf.KVFactory = temp.kvFactory
+	conf.Attacker = temp.attacker
 	return conf
 }
 
@@ -72,6 +73,13 @@ func buildPeerNodeConf(template *configTemplate) *peer.Configuration {
 	config.StabilizeInterval = template.StabilizeInterval
 	config.FixFingersInterval = template.FixFingersInterval
 	return config
+}
+
+// WithAttacker creates an attacker
+func WithAttacker() Option {
+	return func(ct *configTemplate) {
+		ct.attacker = true
+	}
 }
 
 // WithAutostart sets the autostart option.
