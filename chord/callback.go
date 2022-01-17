@@ -2,7 +2,6 @@ package chord
 
 import (
 	"fmt"
-	"github.com/rs/zerolog/log"
 	"go.dedis.ch/cs438/transport"
 	"go.dedis.ch/cs438/types"
 )
@@ -12,8 +11,8 @@ func (c *Chord) ChordFindSuccessorCallback(msg types.Message, pkt transport.Pack
 	successor := c.successor.read()
 	predecessor := c.predecessor.read()
 	findSuccessorMsg := msg.(*types.ChordFindSuccessorMessage)
-	log.Debug().Msgf("ChordFindSuccessorCallback: %d receives findSuccessor of %d, id = %d\n",
-		c.chordId, c.HashKey(findSuccessorMsg.Source), findSuccessorMsg.ID)
+	//log.Debug().Msgf("ChordFindSuccessorCallback: %d receives findSuccessor of %d, id = %d\n",
+	//	c.chordId, c.HashKey(findSuccessorMsg.Source), findSuccessorMsg.ID)
 	if successor == c.conf.Socket.GetAddress() {
 		return fmt.Errorf("ChordFindSuccessorCallback: successor is equal to currnode! ")
 	}
@@ -55,9 +54,9 @@ func (c *Chord) ChordFindSuccessorCallback(msg types.Message, pkt transport.Pack
 		if err != nil {
 			return err
 		}
-		log.Debug().Msgf("ChordFindSuccessorCallback: case 2 Successor = %d. " +
-			"%d sends findSuccessorReply to %d, id = %d\n",
-			c.HashKey(successor), c.chordId, findSuccessorMsg.Source, findSuccessorMsg.ID)
+		//log.Debug().Msgf("ChordFindSuccessorCallback: case 2 Successor = %d. " +
+		//	"%d sends findSuccessorReply to %d, id = %d\n",
+		//	c.HashKey(successor), c.chordId, findSuccessorMsg.Source, findSuccessorMsg.ID)
 		errUnicast := c.Messaging.Unicast(findSuccessorMsg.Source, msg)
 		if errUnicast != nil {
 			return errUnicast
@@ -74,17 +73,17 @@ func (c *Chord) ChordFindSuccessorCallback(msg types.Message, pkt transport.Pack
 			if err != nil {
 				return err
 			}
-			log.Debug().Msgf("ChordFindSuccessorCallback: case 3.1 Successor = %d. " +
-				"%d sends findSuccessorReply to %d, id = %d\n",
-				c.HashKey(successor), c.chordId, findSuccessorMsg.Source, findSuccessorMsg.ID)
+			//log.Debug().Msgf("ChordFindSuccessorCallback: case 3.1 Successor = %d. " +
+			//	"%d sends findSuccessorReply to %d, id = %d\n",
+			//	c.HashKey(successor), c.chordId, findSuccessorMsg.Source, findSuccessorMsg.ID)
 			errUnicast := c.Messaging.Unicast(findSuccessorMsg.Source, msg)
 			if errUnicast != nil {
 				return errUnicast
 			}
 		} else {
-			log.Debug().Msgf("ChordFindSuccessorCallback: case 3.2 Source = %d. " +
-				"%d relay to %d, id = %d\n",
-				c.HashKey(findSuccessorMsg.Source), c.chordId, c.HashKey(nStar), findSuccessorMsg.ID)
+			//log.Debug().Msgf("ChordFindSuccessorCallback: case 3.2 Source = %d. " +
+			//	"%d relay to %d, id = %d\n",
+			//	c.HashKey(findSuccessorMsg.Source), c.chordId, c.HashKey(nStar), findSuccessorMsg.ID)
 			if err := c.RequestSuccessorRemote(findSuccessorMsg.Source,
 				nStar, findSuccessorMsg.ID); err != nil {
 				return err

@@ -60,7 +60,7 @@ func (m *Messager) heartbeatDaemon(interval time.Duration) {
 	}
 
 	for !m.isKilled() {
-		m.Info().Msg("heartbeat once")
+		m.Debug().Msg("heartbeat once")
 		empty, _ := m.msgRegistry.MarshalMessage(&types.EmptyMessage{})
 		if err := m.Broadcast(empty); err != nil {
 			m.Err(err).Send()

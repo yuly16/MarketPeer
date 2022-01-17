@@ -13,19 +13,40 @@ import (
 
 const (
 	EXEC_TXN = iota
+	SET_STORAGE
 	EXEC_CONTRACT
 	CREATE_CONTRACT
 )
+
+var txnTypes = map[int]string{EXEC_TXN: "EXEC_TXN", SET_STORAGE: "SET_STORAGE", EXEC_CONTRACT: "EXEC_CONTRACT", CREATE_CONTRACT: "CREATE_CONTRACT"}
 
 func NewTransaction(nonce int, value int, from account.Address, to account.Address) Transaction {
 	txn := Transaction{}
 	txn.Nonce = nonce
 	txn.Value = value
 	txn.From = from
+	txn.Type = EXEC_TXN
 	txn.To = to
 	txn.V = "abc"
 	txn.S = "def"
 	txn.R = "ghi"
+
+	txn.StoreV = ""
+	return txn
+}
+
+func NewTriggerContractTransaction(nonce int, value int, from account.Address, to account.Address) Transaction {
+	txn := Transaction{}
+	txn.Nonce = nonce
+	txn.Value = value
+	txn.From = from
+	txn.Type = EXEC_CONTRACT
+	txn.To = to
+	txn.V = "abc"
+	txn.S = "def"
+	txn.R = "ghi"
+
+	txn.StoreV = ""
 	return txn
 }
 
@@ -40,6 +61,20 @@ func NewProposeContractTransaction(nonce int, value int, from account.Address, t
 	txn.V = "abc"
 	txn.S = "def"
 	txn.R = "ghi"
+	txn.StoreV = ""
+
+	return txn
+}
+
+func NewSetStorageTransaction(nonce int, value int, from account.Address, key string, kvalue interface{}) Transaction {
+	txn := Transaction{}
+	txn.Nonce = nonce
+	txn.Value = value
+	txn.Type = SET_STORAGE
+	txn.From = from
+	txn.To = from
+	txn.StoreK = key
+	txn.StoreV = kvalue
 	return txn
 }
 
@@ -70,20 +105,22 @@ func NewSignedTransaction(txn Transaction, prv *ecdsa.PrivateKey) (SignedTransac
 }
 
 type Transaction struct {
-	Nonce int
-	From  account.Address
-	To    account.Address
-	Type  int
-	Code  string
-	Value int
-	V     string
-	R     string
-	S     string
+	Nonce  int
+	From   account.Address
+	To     account.Address
+	Type   int
+	Code   string
+	Value  int
+	StoreK string
+	StoreV interface{}
+	V      string
+	R      string
+	S      string
 }
 
 func (t *Transaction) String() string {
-	return fmt.Sprintf("{nonce: %d, value: %d, from: %s, to: %s}", t.Nonce, t.Value, t.From.String()[:6]+"...",
-		t.To.String()[:6]+"...")
+	return fmt.Sprintf("{nonce: %d, value: %d, from: %s, to: %s, type: %s}", t.Nonce, t.Value, t.From.String()[:6]+"...",
+		t.To.String()[:6]+"...", txnTypes[t.Type])
 }
 
 func (t *Transaction) Print() {
