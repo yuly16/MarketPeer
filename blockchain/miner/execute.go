@@ -29,6 +29,11 @@ func (m *Miner) doExecuteTxn(txn *transaction.SignedTransaction, worldState stor
 			return fmt.Errorf("create contract error: %w", err)
 		}
 		return nil
+	} else if txn.Txn.Type == transaction.SET_STORAGE {
+		if err := m.setStorage(txn, worldState); err != nil {
+			return fmt.Errorf("set storage error: %w", err)
+		}
+		return nil
 	} else {
 		// value transfer
 		err := m.doValueTransfer(txn, worldState)
@@ -37,6 +42,22 @@ func (m *Miner) doExecuteTxn(txn *transaction.SignedTransaction, worldState stor
 		}
 		return nil
 	}
+}
+
+func (m *Miner) setStorage(txn *transaction.SignedTransaction, worldState storage.KV) error {
+	value, err := worldState.Get(txn.Txn.From.String())
+	if err != nil {
+		return fmt.Errorf("from address dont exist: %w", err)
+	}
+	fromState, ok := value.(*account.State)
+	if !ok {
+		return fmt.Errorf("from state is corrupted: %v", fromState)
+	}
+	fromState.Nonce += 1
+	if err := fromState.StorageRoot.Put(txn.Txn.StoreK, txn.Txn.StoreV); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (m *Miner) doValueTransfer(txn *transaction.SignedTransaction, worldState storage.KV) error {
@@ -49,13 +70,6 @@ func (m *Miner) doValueTransfer(txn *transaction.SignedTransaction, worldState s
 	if !ok {
 		return fmt.Errorf("from state is corrupted: %v", fromState)
 	}
-	fromState.Balance -= uint(txn.Txn.Value)
-	fromState.Nonce += 1
-	if err = worldState.Put(txn.Txn.From.String(), fromState); err != nil {
-		return fmt.Errorf("cannot put from addr and state to KV: %w", err)
-	}
-
-	// 2. increase receiver balance
 	value, err = worldState.Get(txn.Txn.To.String())
 	if err != nil {
 		return fmt.Errorf("to address dont exist: %w", err)
@@ -64,6 +78,14 @@ func (m *Miner) doValueTransfer(txn *transaction.SignedTransaction, worldState s
 	if !ok {
 		return fmt.Errorf("to state is corrupted: %v", fromState)
 	}
+
+	fromState.Balance -= uint(txn.Txn.Value)
+	fromState.Nonce += 1
+	if err = worldState.Put(txn.Txn.From.String(), fromState); err != nil {
+		return fmt.Errorf("cannot put from addr and state to KV: %w", err)
+	}
+
+	// 2. increase receiver balance
 	toState.Balance += uint(txn.Txn.Value)
 	if err = worldState.Put(txn.Txn.To.String(), toState); err != nil {
 		return fmt.Errorf("cannot put from addr and state to KV: %w", err)

@@ -1,8 +1,8 @@
 package wallet
 
 import (
-	"crypto/rand"
 	"crypto/ecdsa"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -76,8 +76,10 @@ func NewWallet(conf WalletConf) *Wallet {
 	w.verifyFutures = make(map[transaction.SignedTransactionHandle]chan *types.VerifyTransactionReplyMessage)
 	w.verifyThreshold = 0
 	w.logger = logging.RootLogger.With().Str("Wallet", fmt.Sprintf("%s", conf.Addr)).Logger()
+
 	w.logger.Info().Msgf("wallet created:\n pubKey=%s, priKey=%s, account=%s",
 		w.publicKey.String(), w.privateKey.String(), w.account.String())
+
 	w.registerCallbacks()
 	//sha256.New().Write([]byte(w.publicKey))
 	return &w
@@ -231,7 +233,7 @@ func (w *Wallet) TriggerContract(dest account.Address) error {
 	}
 
 	// create the transaction (value not care)
-	txn := transaction.NewTransaction(w.account.GetNonce(), 0, *w.GetAccount().GetAddr(), dest)
+	txn := transaction.NewTriggerContractTransaction(w.account.GetNonce(), 0, *w.GetAccount().GetAddr(), dest)
 	// submit
 	handle := w.SubmitTxn(txn)
 	time.Sleep(1 * time.Second)
@@ -253,7 +255,7 @@ func (w *Wallet) TriggerContract(dest account.Address) error {
 func (w *Wallet) ProposeContract() (string, error) {
 	err := w.SyncAccount()
 	for err != nil {
-		w.logger.Warn().Msgf("trigger contract sync account fail: %v", err)
+		w.logger.Warn().Msgf("propose contract sync account fail: %v", err)
 		err = w.SyncAccount()
 	}
 
@@ -283,6 +285,30 @@ func (w *Wallet) ProposeContract() (string, error) {
 		}
 	}
 	return string(contract_address), nil
+}
+
+func (w *Wallet) UploadProduct(product string, amount int) error {
+	err := w.SyncAccount()
+	for err != nil {
+		w.logger.Warn().Msgf("upload product sync account fail: %v", err)
+		err = w.SyncAccount()
+	}
+
+	txn := transaction.NewSetStorageTransaction(w.account.GetNonce(), 0, *w.GetAccount().GetAddr(), product, amount)
+	// submit
+	handle := w.SubmitTxn(txn)
+	time.Sleep(1 * time.Second)
+	// verify for a time
+	begin := time.Now()
+	err = w.VerifyTransaction(handle)
+	for err != nil {
+		err = w.VerifyTransaction(handle)
+		time.Sleep(500 * time.Millisecond)
+		if time.Since(begin) > 3*time.Second {
+			return fmt.Errorf("transaction failed")
+		}
+	}
+	return nil
 }
 
 // wallet can submit a transaction
@@ -335,11 +361,4 @@ func (w *Wallet) registerCallbacks() {
 	w.messaging.RegisterMessageCallback(types.SyncAccountReplyMessage{}, w.SyncAccountReplyMessageCallback)
 	w.messaging.RegisterMessageCallback(types.VerifyTransactionReplyMessage{}, w.VerifyTxnReplyMessageCallback)
 
-}
-
-//--------------The following code is just for debug -------------------//
-
-func (w *Wallet) Test_submitTxn() {
-	txn := transaction.NewTransaction(1, 2, *w.account.GetAddr(), *w.account.GetAddr())
-	w.SubmitTxn(txn)
 }
