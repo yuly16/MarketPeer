@@ -18,7 +18,7 @@ import (
 // 	With().Str("mod", "UDPSock").Timestamp().Logger()
 
 const bufSize = 9200 // macos max udp datagram is 9216 bytes
-const recvBufSize = 100
+const recvBufSize = 1000
 
 // NewUDP returns a new udp transport implementation.
 func NewUDP() transport.Transport {

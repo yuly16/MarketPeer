@@ -133,7 +133,6 @@ func (m *Messager) listenDaemon() {
 		// 	1.1 if yes, use `msgRegistry` to execute the callback associated with the message
 		//  1.2 if no, update the `RelayedBy` field of the message
 		if pack.Header.Destination == m.sock.GetAddress() {
-			fmt.Printf("I receive a msg from %s\n", pack.Header.Source)
 			m.Trace().Str("addr", pack.Header.Destination).Msg("addr matched between peer and sender")
 			if err := m.msgRegistry.ProcessPacket(pack); err != nil {
 				var sendErr *SenderCallbackError

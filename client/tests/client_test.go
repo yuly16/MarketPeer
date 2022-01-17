@@ -14,6 +14,7 @@ import (
 	z "go.dedis.ch/cs438/internal/testing"
 	"go.dedis.ch/cs438/registry/standard"
 	"go.dedis.ch/cs438/transport/channel"
+	"go.dedis.ch/cs438/transport/udp"
 	"math/big"
 	"sort"
 	"testing"
@@ -110,7 +111,7 @@ func Test_Client_SimpleScenario(t *testing.T) {
 
 func Test_Client_ProductStorage(t *testing.T) {
 	//var kvFactory storage.KVFactory = storage.CreateSimpleKV
-	transp := channel.NewTransport()
+	transp := udp.NewUDP()
 	nodeNum := 5
 	bitNum := 12
 	nodes := make([]client.Client, nodeNum)
@@ -151,17 +152,14 @@ func Test_Client_ProductStorage(t *testing.T) {
 	orange := client.Product{
 		Name: "orange",
 		Owner: nodes[0].Address,
-		Stock: 1000,
 	}
 	apple := client.Product{
 		Name: "apple",
 		Owner: nodes[1].Address,
-		Stock: 400,
 	}
 	banana := client.Product{
 		Name: "banana",
 		Owner: nodes[0].Address,
-		Stock: 600,
 	}
 
 	orange_key := HashKey(orange.Name, uint(bitNum))
