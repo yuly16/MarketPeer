@@ -110,9 +110,9 @@ type Contract struct {
     contract.SmartContract
     Proposer_account string
     Acceptor_account string
-    Code_plain_text		string
-    Code_ast					 parser.Code
-    Code_state_tree		StateTree
+    Code_plain_text string
+    Code_ast parser.Code
+    Code_state_tree StateTree
     ...
 }
 ```
