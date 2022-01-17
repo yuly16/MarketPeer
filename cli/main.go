@@ -9,8 +9,8 @@ import (
 	"go.dedis.ch/cs438/blockchain/block"
 	"go.dedis.ch/cs438/blockchain/miner"
 	"go.dedis.ch/cs438/blockchain/storage"
-	"go.dedis.ch/cs438/contract/impl"
 	"go.dedis.ch/cs438/client/client"
+	"go.dedis.ch/cs438/contract/impl"
 	z "go.dedis.ch/cs438/internal/testing"
 	"go.dedis.ch/cs438/registry/standard"
 	"go.dedis.ch/cs438/transport/udp"
@@ -192,6 +192,11 @@ func main() {
 			return
 		}
 	}
+	time.Sleep(time.Second * 4)
+	accountStruct := client.Account{
+		clientNode.BlockChainFullNode.GetAccountAddr().String(),
+	}
+	_ = clientNode.StoreAccount(addr, accountStruct)
 	// read from command
 	// reader := bufio.NewReader(os.Stdin)
 	// for {
@@ -224,8 +229,8 @@ func main() {
 	}
 	inputproduct_validate := func(input string) error {
 		params := strings.Split(input, " ")
-		if len(params) == 3 {
-			_, err := strconv.Atoi(params[2])
+		if len(params) == 2 {
+			_, err := strconv.Atoi(params[1])
 			if err != nil {
 				return fmt.Errorf("error")
 			} else {
@@ -291,15 +296,16 @@ func main() {
 	for {
 		cmd_prompt := promptui.Select{
 			Label: "Select your command",
-			Items: []string{"View Products",
-				"Input Product Information",
-				"View Account",
-				"Input Account Information",
-				"Transfer",
+			Items: []string{
 				"ShowAccount",
 				"ShowChain",
+				"Input Product Information",
+				"View Products",
 				"Propose Smart Contract", 
 				"Accept Contract",
+				"Input Account Information",
+				"Transfer",
+				"View Account",
 				"Exit"},
 		}
 
@@ -332,11 +338,11 @@ func main() {
 			Validate: viewproduct_validate,
 		}
 		propose_contract_prompt := promptui.Prompt{
-			Label: "[Propose contract] input (contract name, acceptor address): ",
+			Label: "[Propose contract] input (contract name, acceptor address)",
 			Validate: propose_contract_validate,
 		}
 		accept_contract_prompt := promptui.Prompt{
-			Label: "[Accept contract] input (format: address): ",
+			Label: "[Accept contract] input (format: address)",
 			Validate: accept_contract_validate,
 		}
 		transfer_prompt := promptui.Prompt{
@@ -387,11 +393,10 @@ func main() {
 			} else {
 				infos := strings.Split(info, " ")
 				name := infos[0]
-				address := infos[1]
-				amount, _ := strconv.Atoi(infos[2])
+				amount, _ := strconv.Atoi(infos[1])
 				product := client.Product{
 					Name: name,
-					Owner: address,
+					Owner: clientNode.BlockChainFullNode.GetAccountAddr().String(),
 					Amount: amount,
 				}
 				err := clientNode.StoreProductString(name, product)
@@ -415,7 +420,7 @@ func main() {
 			} else {
 				product, exist := clientNode.ReadProductString(info)
 				if exist {
-					fmt.Printf("ProductInfo: name: %s, description: %s, amount: %d\n", product.Name, product.Owner, product.Amount)
+					fmt.Printf("ProductInfo: name: %s, Owner: %s\n", product.Name, product.Owner)
 				} else {
 					fmt.Println("the product doesn't exist in chord. ")
 				}
